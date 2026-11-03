@@ -1,5 +1,7 @@
 //! Python bindings for cadboss.
 
+#![deny(unsafe_code)]
+
 use pyo3::prelude::*;
 
 #[pymodule]
