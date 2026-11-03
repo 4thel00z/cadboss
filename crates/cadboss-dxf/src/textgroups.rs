@@ -130,11 +130,7 @@ impl Collector {
             EntityKind::Insert { attributes, .. } => {
                 for attribute in attributes {
                     self.groups.attributes.push(TextItem {
-                        text: Text::from(format!(
-                            "{}={}",
-                            display(&attribute.tag),
-                            display(&attribute.value)
-                        )),
+                        text: tagged(&attribute.tag, &attribute.value),
                         source: TextSource::Attribute,
                         layer: entity.common.layer.clone(),
                         layout: layout.name.clone(),
@@ -270,9 +266,12 @@ fn unplaced(text: Text, source: TextSource) -> TextItem {
     }
 }
 
-fn display(text: &Text) -> String {
-    text.as_str()
-        .map_or_else(|| text.to_string(), str::to_owned)
+/// `tag=value`, kept as bytes when either side is not text.
+fn tagged(tag: &Text, value: &Text) -> Text {
+    let (Text::Str(tag), Text::Str(value)) = (tag, value) else {
+        return Text::Bytes([tag.as_bytes(), b"=", value.as_bytes()].concat());
+    };
+    Text::from(format!("{tag}={value}"))
 }
 
 fn anchor(entity: &Entity) -> Option<Point> {
@@ -321,7 +320,9 @@ fn dimension_text(text: &Text, measurement: Option<f64>) -> Option<Text> {
         "" | "<>" => measured,
         other => other.replace("<>", &measured),
     };
-    Some(Text::from(shown)).filter(|text| !display(text).trim().is_empty())
+    Some(shown)
+        .filter(|shown| !shown.trim().is_empty())
+        .map(Text::from)
 }
 
 fn compare(first: &(usize, TextItem), second: &(usize, TextItem)) -> Ordering {

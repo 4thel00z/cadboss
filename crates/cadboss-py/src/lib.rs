@@ -334,8 +334,8 @@ impl PyDocument {
     }
 
     #[getter]
-    fn version(&self) -> String {
-        text_label(&self.document.metadata.version)
+    fn version(&self) -> PyText {
+        PyText(self.document.metadata.version.clone())
     }
 
     #[getter]
@@ -372,12 +372,12 @@ impl PyDocument {
     }
 
     #[getter]
-    fn blocks(&self) -> Vec<String> {
+    fn blocks(&self) -> Vec<PyText> {
         self.document
             .blocks
             .iter()
             .filter(|block| !block.anonymous)
-            .map(|block| text_label(&block.name))
+            .map(|block| PyText(block.name.clone()))
             .collect()
     }
 

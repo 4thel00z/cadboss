@@ -45,12 +45,19 @@ fn every_downloaded_sample_opens_with_its_declared_version() -> Result<(), Box<d
             .get("has_text")
             .and_then(|value| value.as_bool())
             .unwrap_or(false);
+        let placed = document.text.annotations.len() + document.text.attributes.len();
         assert!(
-            !has_text || !document.text.is_empty(),
-            "{name}: no text found"
+            !has_text || placed > 0,
+            "{name}: no annotation or attribute found"
         );
+        let leaked = document
+            .text
+            .iter()
+            .filter_map(|item| item.text.as_str())
+            .find(|text| text.contains("\\N") || text.contains("\\P"));
+        assert_eq!(leaked, None, "{name}: MTEXT break code left in text");
         println!(
-            "{name}: {} text items, {} skipped",
+            "{name}: {} text items, {placed} annotations and attributes, {} skipped",
             document.text.len(),
             document.report.skipped.len()
         );

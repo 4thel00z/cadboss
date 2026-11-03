@@ -98,3 +98,33 @@ def test_document_is_usable_from_threads(simple_dxf_bytes: bytes) -> None:
 def test_version_matches_cargo() -> None:
     cargo = tomllib.loads((ROOT / "Cargo.toml").read_text())
     assert cadboss.__version__ == cargo["workspace"]["package"]["version"]
+
+
+def cp1251_block_drawing(name: bytes) -> bytes:
+    pairs: list[tuple[int, bytes]] = [
+        (0, b"SECTION"),
+        (2, b"HEADER"),
+        (9, b"$ACADVER"),
+        (1, b"AC1015"),
+        (9, b"$DWGCODEPAGE"),
+        (3, b"ANSI_1251"),
+        (0, b"ENDSEC"),
+        (0, b"SECTION"),
+        (2, b"BLOCKS"),
+        (0, b"BLOCK"),
+        (2, name),
+        (10, b"0.0"),
+        (20, b"0.0"),
+        (0, b"ENDBLK"),
+        (0, b"ENDSEC"),
+        (0, b"EOF"),
+    ]
+    return b"".join(str(code).encode() + b"\n" + value + b"\n" for code, value in pairs)
+
+
+def test_undecodable_block_names_come_back_as_bytes() -> None:
+    name = b"\xcd\xc0\xd1\xce\xd1"
+    doc = Document.load(cp1251_block_drawing(name))
+    assert isinstance(doc.version, str)
+    assert doc.version == "AC1015"
+    assert doc.blocks == [name]

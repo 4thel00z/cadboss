@@ -49,3 +49,14 @@ fn json_compact_round_trips_through_serde_json_value() -> TestResult {
     assert_eq!(value["metadata"]["format"], serde_json::json!("Dxf"));
     Ok(())
 }
+
+#[test]
+fn an_undecodable_attribute_value_serializes_as_a_bytes_item() -> TestResult {
+    let document = cadboss_dxf::load(cadboss_testkit::dxf::cp1251_attribute_drawing())?;
+    let value: serde_json::Value = serde_json::from_str(&to_json_compact(&document))?;
+    assert_eq!(
+        value["text"]["attributes"][0]["text"]["_bytes"],
+        serde_json::json!("UFVNUD3NwNHO0Q==")
+    );
+    Ok(())
+}

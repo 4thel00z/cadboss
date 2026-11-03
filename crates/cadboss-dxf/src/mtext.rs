@@ -8,6 +8,7 @@ const ARGUMENT_END: [char; 4] = [';', '\\', '{', '}'];
 const NON_BREAKING_SPACE: char = '\u{a0}';
 
 /// Removes braces and formatting commands from MTEXT contents and renders stacked fractions as `a/b`.
+/// Paragraph breaks (`\P`), column breaks (`\N`) and the dimension-line break (`\X`) become newlines.
 /// Backslash escapes are resolved here once, so an escaped backslash is never rescanned; percent codes are expanded last.
 pub fn strip_mtext(raw: &str) -> String {
     let mut out = String::with_capacity(raw.len());
@@ -37,7 +38,7 @@ fn command<'a>(rest: &'a str, out: &mut String) -> &'a str {
     let after = rest.get(1 + letter.len_utf8()..).unwrap_or("");
     match letter {
         '\\' | '{' | '}' => out.push(letter),
-        'P' => out.push('\n'),
+        'P' | 'N' | 'X' => out.push('\n'),
         '~' => out.push(NON_BREAKING_SPACE),
         'S' => {
             let (argument, remaining) = argument(after);
@@ -133,6 +134,12 @@ mod tests {
     fn escaped_backslash_is_not_rescanned_as_a_unicode_escape() {
         assert_eq!(strip_mtext("\\\\U+00B0"), "\\U+00B0");
         assert_eq!(strip_mtext("\\U+00B0"), "\u{b0}");
+    }
+
+    #[test]
+    fn column_and_dimension_line_breaks_become_newlines() {
+        assert_eq!(strip_mtext("Line 1\\NLine 2"), "Line 1\nLine 2");
+        assert_eq!(strip_mtext("upper\\Xlower"), "upper\nlower");
     }
 
     #[test]

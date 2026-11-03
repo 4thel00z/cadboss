@@ -1144,6 +1144,35 @@ pub fn realistic_drawing(entities: usize) -> Vec<u8> {
     realistic_batch(0, entities).build()
 }
 
+/// `НАСОС` in Windows-1251.
+pub const CP1251_PUMP: &[u8] = b"\xcd\xc0\xd1\xce\xd1";
+
+const VALUE_MARKER: &[u8] = b"@VALUE@";
+
+fn replace_once(bytes: Vec<u8>, from: &[u8], to: &[u8]) -> Vec<u8> {
+    let Some(at) = bytes.windows(from.len()).position(|window| window == from) else {
+        return bytes;
+    };
+    [
+        bytes.get(..at).unwrap_or_default(),
+        to,
+        bytes.get(at + from.len()..).unwrap_or_default(),
+    ]
+    .concat()
+}
+
+/// An AC1015 drawing with `$DWGCODEPAGE` ANSI_1251 and one INSERT whose `PUMP` attribute value is `CP1251_PUMP`.
+pub fn cp1251_attribute_drawing() -> Vec<u8> {
+    let bytes = DxfBuilder::new()
+        .version("AC1015")
+        .codepage("ANSI_1251")
+        .block("TAGBLK", (0.0, 0.0))
+        .end()
+        .insert_with_attribs("TAGBLK", (0.0, 0.0), &[("PUMP", "@VALUE@")])
+        .build();
+    replace_once(bytes, VALUE_MARKER, CP1251_PUMP)
+}
+
 pub fn nested_inserts(depth: usize) -> Vec<u8> {
     let mut builder = DxfBuilder::new();
     for level in 0..=depth {

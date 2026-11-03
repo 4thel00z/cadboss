@@ -190,6 +190,13 @@ impl<'t> Iterator for EntityDecoder<'t> {
     }
 }
 
+fn stripped(text: Text) -> Text {
+    let Text::Str(text) = text else {
+        return text;
+    };
+    Text::Str(strip_mtext(&text))
+}
+
 fn is_child(name: &[u8]) -> bool {
     matches!(name, b"VERTEX" | b"ATTRIB" | b"SEQEND")
 }
@@ -353,11 +360,17 @@ impl<'t> Fields<'_, 't> {
                 }
             }
         }
-        let text = match decode(self.cp, &joined, self.report) {
-            Text::Str(text) => Text::Str(strip_mtext(&text)),
-            other => other,
-        };
+        let text = stripped(decode(self.cp, &joined, self.report));
         self.finish(text, cut)
+    }
+
+    /// A single string value carrying MTEXT formatting codes, cut to the string budget and stripped.
+    fn formatted(&mut self, code: i16) -> Option<Text> {
+        let raw = self.raw(code)?;
+        let keep = self.cut_len(raw);
+        let cut = keep < raw.len();
+        let text = stripped(decode(self.cp, raw.get(..keep).unwrap_or(raw), self.report));
+        Some(self.finish(text, cut))
     }
 
     fn hyperlink(&mut self) -> Option<Text> {
@@ -590,7 +603,7 @@ fn mtext(fields: &mut Fields) -> Option<EntityKind> {
 
 fn dimension(fields: &mut Fields) -> EntityKind {
     EntityKind::Dimension {
-        text: fields.text_unescaped(1).unwrap_or_default(),
+        text: fields.formatted(1).unwrap_or_default(),
         measurement: fields.float(42),
         text_position: fields.point(11),
         dim_type: fields

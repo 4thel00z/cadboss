@@ -1,7 +1,7 @@
 use cadboss_core::Point;
 use cadboss_dxf::DxfDocument;
-use cadboss_model::{TextItem, TextSource};
-use cadboss_testkit::dxf::{simple_drawing, DxfBuilder};
+use cadboss_model::{Text, TextItem, TextSource};
+use cadboss_testkit::dxf::{cp1251_attribute_drawing, simple_drawing, DxfBuilder, CP1251_PUMP};
 
 fn texts(items: &[TextItem]) -> Vec<String> {
     items.iter().map(|item| item.text.to_string()).collect()
@@ -216,4 +216,37 @@ fn layout_tab_order_ranks_model_before_paper_layouts() {
         .build();
     let groups = DxfDocument::load(bytes).unwrap().text();
     assert_eq!(texts(&groups.annotations), ["model", "paper"]);
+}
+
+#[test]
+fn dimension_override_formatting_codes_are_stripped_before_substitution() {
+    let bytes = DxfBuilder::new()
+        .dimension("{\\H0.7x;<>\\S+0.1^-0.2;}", 25.0)
+        .dimension("<>\\XTYP", 10.0)
+        .build();
+    let groups = DxfDocument::load(bytes).unwrap().text();
+    assert_eq!(texts(&groups.annotations), ["25+0.1/-0.2", "10\nTYP"]);
+    assert!(groups
+        .annotations
+        .iter()
+        .all(|item| !item.text.to_string().contains(['\\', '{'])));
+}
+
+#[test]
+fn mtext_column_breaks_become_newlines() {
+    let bytes = DxfBuilder::new()
+        .mtext("Line 1\\NLine 2", (0.0, 0.0), 1.0)
+        .build();
+    let groups = DxfDocument::load(bytes).unwrap().text();
+    assert_eq!(texts(&groups.annotations), ["Line 1\nLine 2"]);
+}
+
+#[test]
+fn an_undecodable_attribute_value_keeps_its_bytes() {
+    let groups = DxfDocument::load(cp1251_attribute_drawing())
+        .unwrap()
+        .text();
+    let expected = [b"PUMP=".as_slice(), CP1251_PUMP].concat();
+    assert_eq!(groups.attributes.len(), 1);
+    assert_eq!(groups.attributes[0].text, Text::Bytes(expected));
 }
