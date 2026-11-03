@@ -6,6 +6,7 @@ pub struct Budget {
     pub max_entities: u64,
     /// Cap on paper layouts; the model layout is always kept and not counted.
     pub max_layouts: u32,
+    /// Number of insert levels, the model-space level counted as level 0, so the deepest depth value a walk reports is `max_nesting - 1`.
     pub max_nesting: u32,
     pub max_string_bytes: u32,
     pub max_tokens: u64,
