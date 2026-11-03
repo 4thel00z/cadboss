@@ -19,10 +19,8 @@ fn next_line(bytes: &[u8], pos: usize) -> Option<Line> {
         Some(at) => (pos + at, pos + at + 1),
         None => (bytes.len(), bytes.len()),
     };
-    let end = match end > pos && bytes.get(end - 1) == Some(&b'\r') {
-        true => end - 1,
-        false => end,
-    };
+    let carriage_return = end > pos && bytes.get(end - 1) == Some(&b'\r');
+    let end = end - usize::from(carriage_return);
     Some(Line {
         start: pos,
         end,
@@ -42,10 +40,13 @@ fn trim_blanks(mut line: &[u8]) -> &[u8] {
 
 fn parse_integer(line: &[u8]) -> Option<i32> {
     let line = trim_blanks(line);
-    let (negative, digits) = match line {
-        [b'-', rest @ ..] => (true, rest),
-        rest => (false, rest),
-    };
+    if let [b'-', digits @ ..] = line {
+        return magnitude(digits)?.checked_neg();
+    }
+    magnitude(line)
+}
+
+fn magnitude(digits: &[u8]) -> Option<i32> {
     if digits.is_empty() {
         return None;
     }
@@ -56,7 +57,7 @@ fn parse_integer(line: &[u8]) -> Option<i32> {
         }
         value = value.checked_mul(10)?.checked_add(i32::from(byte - b'0'))?;
     }
-    Some(if negative { -value } else { value })
+    Some(value)
 }
 
 fn parse_code(line: &[u8]) -> Option<i16> {
@@ -188,7 +189,7 @@ impl Builder {
 }
 
 pub(crate) fn lex_ascii(bytes: &[u8], budget: &Budget) -> Result<(Tape, Report)> {
-    let mut pos = if bytes.starts_with(BOM) { BOM.len() } else { 0 };
+    let mut pos = bytes.strip_prefix(BOM).map_or(0, |_| BOM.len());
     if !looks_like_dxf(bytes, pos) {
         return Err(Error::NotDxf);
     }

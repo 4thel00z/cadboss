@@ -546,8 +546,8 @@ impl DxfBuilder {
     /// Returns the bytes before the first model-space entity and the bytes after the last one, so a caller can stream entities between them.
     pub fn build_around_entities(self) -> (Vec<u8>, Vec<u8>) {
         let (records, start, end) = self.records_with_entity_span();
-        let head = write_ascii(&records[..start], self.crlf);
-        let tail = write_ascii(&records[end..], self.crlf);
+        let head = write_ascii(records.get(..start).unwrap_or_default(), self.crlf);
+        let tail = write_ascii(records.get(end..).unwrap_or_default(), self.crlf);
         (head, tail)
     }
 
@@ -571,11 +571,15 @@ impl DxfBuilder {
     }
 
     fn target_entities(&mut self) -> &mut Vec<Entity> {
-        match self.target {
-            Target::Block(index) if index < self.blocks.len() => &mut self.blocks[index].entities,
-            Target::Paper(index) if index < self.layouts.len() => &mut self.layouts[index].entities,
-            _ => &mut self.entities,
-        }
+        let target = match self.target {
+            Target::Block(index) => self.blocks.get_mut(index).map(|block| &mut block.entities),
+            Target::Paper(index) => self
+                .layouts
+                .get_mut(index)
+                .map(|layout| &mut layout.entities),
+            Target::Model => None,
+        };
+        target.unwrap_or(&mut self.entities)
     }
 
     fn push(mut self, kind: Kind) -> DxfBuilder {
@@ -812,7 +816,7 @@ fn write_block(out: &mut Out, name: &str, record: u64, base: (f64, f64), xref: O
     out.s(8, "0");
     out.s(100, "AcDbBlockBegin");
     out.s(2, name);
-    out.n(70, if xref.is_some() { XREF_FLAGS } else { 0 });
+    out.n(70, xref.map_or(0, |_| XREF_FLAGS));
     out.point(10, base.0, base.1, 0.0);
     out.s(3, name);
     out.s(1, xref.unwrap_or_default());
@@ -1048,8 +1052,15 @@ fn write_binary(records: &[Record]) -> Vec<u8> {
     bytes
 }
 
+fn newline(crlf: bool) -> &'static [u8] {
+    if crlf {
+        return b"\r\n";
+    }
+    b"\n"
+}
+
 fn write_ascii(records: &[Record], crlf: bool) -> Vec<u8> {
-    let newline: &[u8] = if crlf { b"\r\n" } else { b"\n" };
+    let newline = newline(crlf);
     let mut bytes = Vec::new();
     for (code, value) in records {
         bytes.extend_from_slice(format!("{code:>3}").as_bytes());
@@ -1061,7 +1072,7 @@ fn write_ascii(records: &[Record], crlf: bool) -> Vec<u8> {
             Value::I16(number) => bytes.extend_from_slice(number.to_string().as_bytes()),
             Value::I32(number) => bytes.extend_from_slice(number.to_string().as_bytes()),
             Value::I64(number) => bytes.extend_from_slice(number.to_string().as_bytes()),
-            Value::Bool(flag) => bytes.push(if *flag { b'1' } else { b'0' }),
+            Value::Bool(flag) => bytes.push(b'0' + u8::from(*flag)),
         }
         bytes.extend_from_slice(newline);
     }
@@ -1091,8 +1102,8 @@ pub fn simple_builder() -> DxfBuilder {
 
 pub fn large_drawing(entities: usize) -> Vec<u8> {
     let mut builder = DxfBuilder::new();
-    for index in 0..entities {
-        let layer = if index % 2 == 0 { "0" } else { "L1" };
+    let layers = ["0", "L1"].into_iter().cycle().take(entities);
+    for (index, layer) in layers.enumerate() {
         let x = index as f64;
         builder = builder.on_layer(layer).line((x, 0.0), (x + 1.0, 1.0));
     }
@@ -1120,7 +1131,11 @@ pub fn realistic_batch(start: usize, count: usize) -> DxfBuilder {
         builder = builder.layer(name, 7);
     }
     for index in start..start + count {
-        builder = builder.on_layer(REALISTIC_LAYERS[index % REALISTIC_LAYERS.len()]);
+        let layer = REALISTIC_LAYERS
+            .get(index % REALISTIC_LAYERS.len())
+            .copied()
+            .unwrap_or("0");
+        builder = builder.on_layer(layer);
         builder = match index % 20 {
             0..=13 => builder.line(point(index, 1), point(index, 3)),
             14..=16 => {

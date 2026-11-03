@@ -162,15 +162,11 @@ fn cell(text: &str) -> String {
 
 pub fn format_number(value: f64) -> String {
     let fixed = format!("{value:.2}");
-    let trimmed = if fixed.contains('.') {
-        fixed.trim_end_matches('0').trim_end_matches('.')
-    } else {
-        fixed.as_str()
-    };
-    match trimmed {
-        "-0" => "0".to_owned(),
-        other => other.to_owned(),
+    let trimmed = fixed.trim_end_matches('0').trim_end_matches('.');
+    if trimmed == "-0" {
+        return "0".to_owned();
     }
+    trimmed.to_owned()
 }
 
 const MAX_DATE_DAYS: f64 = 1.0e8;
@@ -194,11 +190,7 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
     let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
     let month_index = (5 * day_of_year + 2) / 153;
     let day = (day_of_year - (153 * month_index + 2) / 5 + 1) as u32;
-    let month = if month_index < 10 {
-        month_index + 3
-    } else {
-        month_index - 9
-    } as u32;
+    let month = ((month_index + 2) % 12 + 1) as u32;
     let year = year_of_era + era * 400 + i64::from(month <= 2);
     (year, month, day)
 }

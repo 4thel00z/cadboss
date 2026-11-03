@@ -158,21 +158,19 @@ fn points_bbox(points: &[Point]) -> Option<BBox> {
     Some(bbox).filter(|bbox| !bbox.is_empty())
 }
 
+/// Segment `i` runs from point `i` to point `i + 1`, and a closed polyline adds the segment back to the first point.
 fn polyline_bbox(points: &[Point], bulges: &[f64], closed: bool) -> Option<BBox> {
     let mut bbox = points_bbox(points)?;
-    let segments = if closed {
-        points.len()
-    } else {
-        points.len().saturating_sub(1)
-    };
-    for index in 0..segments {
-        let bulge = bulges.get(index).copied().unwrap_or(0.0);
-        if bulge == 0.0 {
+    let ends = points
+        .iter()
+        .skip(1)
+        .chain(points.first().filter(|_| closed));
+    let bulges = bulges.iter().chain(std::iter::repeat(&0.0));
+    for ((start, end), bulge) in points.iter().zip(ends).zip(bulges) {
+        if *bulge == 0.0 {
             continue;
         }
-        let start = points[index];
-        let end = points[(index + 1) % points.len()];
-        let Some((center, radius, start_deg, end_deg)) = bulge_arc(start, end, bulge) else {
+        let Some((center, radius, start_deg, end_deg)) = bulge_arc(*start, *end, *bulge) else {
             continue;
         };
         bbox = bbox.union(&arc_bbox(center, radius, start_deg, end_deg));

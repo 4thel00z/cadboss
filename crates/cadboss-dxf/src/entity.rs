@@ -18,6 +18,7 @@ const POLYFACE_VERTEX: i64 = 64;
 const DEFAULT_SPLINE_DEGREE: u16 = 3;
 
 type LayoutOf<'t> = &'t dyn Fn(Option<u64>, bool) -> Text;
+type Decode = fn(Codepage, &[u8], &mut Report) -> Text;
 
 /// Yields one entity per code-0 record of the cursor range, consuming the VERTEX or ATTRIB records and SEQEND that belong to it.
 /// Strings are decoded first and then cut to `Budget::max_string_bytes` on a character boundary.
@@ -318,26 +319,21 @@ impl<'t> Fields<'_, 't> {
         text
     }
 
-    fn string(&mut self, raw: &[u8], unescape: bool) -> Text {
+    fn string(&mut self, raw: &[u8], decoder: Decode) -> Text {
         let keep = self.cut_len(raw);
         let cut = keep < raw.len();
-        let raw = raw.get(..keep).unwrap_or(raw);
-        let text = if unescape {
-            decode_unescaped(self.cp, raw, self.report)
-        } else {
-            decode(self.cp, raw, self.report)
-        };
+        let text = decoder(self.cp, raw.get(..keep).unwrap_or(raw), self.report);
         self.finish(text, cut)
     }
 
     fn text(&mut self, code: i16) -> Option<Text> {
         let raw = self.raw(code)?;
-        Some(self.string(raw, false))
+        Some(self.string(raw, decode))
     }
 
     fn text_unescaped(&mut self, code: i16) -> Option<Text> {
         let raw = self.raw(code)?;
-        Some(self.string(raw, true))
+        Some(self.string(raw, decode_unescaped))
     }
 
     fn mtext(&mut self) -> Text {
@@ -380,7 +376,7 @@ impl<'t> Fields<'_, 't> {
             .take_while(|(code, _)| *code != 1001)
             .find(|(code, _)| *code == 1000)
             .map(|(_, value)| value)?;
-        Some(self.string(raw, false))
+        Some(self.string(raw, decode))
     }
 
     fn common(&mut self, layout_of: LayoutOf) -> EntityCommon {
@@ -428,7 +424,7 @@ fn build<'t>(
 
 fn unknown(fields: &mut Fields, name: &[u8]) -> EntityKind {
     EntityKind::Unknown {
-        type_name: fields.string(name, false),
+        type_name: fields.string(name, decode),
     }
 }
 

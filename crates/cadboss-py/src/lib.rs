@@ -259,10 +259,16 @@ impl PySkipped {
 
 fn flag(value: bool) -> &'static str {
     if value {
-        "True"
-    } else {
-        "False"
+        return "True";
     }
+    "False"
+}
+
+fn serialized(document: &Document, compact: bool) -> String {
+    if compact {
+        return to_json_compact(document);
+    }
+    to_json(document)
 }
 
 #[pyclass(frozen, name = "Document", module = "cadboss")]
@@ -410,13 +416,7 @@ impl PyDocument {
 
     #[pyo3(signature = (compact=false))]
     fn json(&self, py: Python<'_>, compact: bool) -> String {
-        py.allow_threads(|| {
-            if compact {
-                to_json_compact(&self.document)
-            } else {
-                to_json(&self.document)
-            }
-        })
+        py.allow_threads(|| serialized(&self.document, compact))
     }
 
     fn report(&self) -> Vec<PySkipped> {
@@ -430,7 +430,8 @@ impl PyDocument {
 }
 
 #[pymodule]
-fn _cadboss(m: &Bound<'_, PyModule>) -> PyResult<()> {
+#[pyo3(name = "_cadboss")]
+fn cadboss(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add("CadError", m.py().get_type::<CadError>())?;
     m.add_class::<PyDocument>()?;

@@ -85,18 +85,20 @@ impl Serialize for Text {
 
 const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
+/// Each chunk of up to three bytes becomes one sextet per byte plus one, padded with `=` to four characters.
 fn base64(bytes: &[u8]) -> String {
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for chunk in bytes.chunks(3) {
-        let b0 = u32::from(chunk[0]);
-        let b1 = u32::from(chunk.get(1).copied().unwrap_or(0));
-        let b2 = u32::from(chunk.get(2).copied().unwrap_or(0));
-        let word = (b0 << 16) | (b1 << 8) | b2;
-        let sextet = |shift: u32| char::from(ALPHABET[((word >> shift) & 63) as usize]);
-        out.push(sextet(18));
-        out.push(sextet(12));
-        out.push(if chunk.len() > 1 { sextet(6) } else { '=' });
-        out.push(if chunk.len() > 2 { sextet(0) } else { '=' });
+        let byte = |at: usize| u32::from(chunk.get(at).copied().unwrap_or(0));
+        let word = (byte(0) << 16) | (byte(1) << 8) | byte(2);
+        let sextet = |shift: u32| {
+            ALPHABET
+                .get(((word >> shift) & 63) as usize)
+                .copied()
+                .map_or('=', char::from)
+        };
+        out.extend([18, 12, 6, 0].into_iter().take(chunk.len() + 1).map(sextet));
+        out.extend(std::iter::repeat_n('=', 3 - chunk.len()));
     }
     out
 }

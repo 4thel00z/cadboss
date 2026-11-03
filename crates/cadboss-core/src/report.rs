@@ -75,13 +75,20 @@ pub struct Skipped {
 }
 
 impl Skipped {
+    fn noun(&self) -> &'static str {
+        if self.count == 1 {
+            return self.kind.label();
+        }
+        self.kind.plural_label()
+    }
+
     fn describe(&self) -> String {
-        let noun = if self.count == 1 {
-            self.kind.label()
-        } else {
-            self.kind.plural_label()
-        };
-        format!("{} {} skipped ({})", self.count, noun, self.reason.label())
+        format!(
+            "{} {} skipped ({})",
+            self.count,
+            self.noun(),
+            self.reason.label()
+        )
     }
 }
 

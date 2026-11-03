@@ -147,12 +147,11 @@ impl Transform {
 
     /// Composes so that `a.then(b).apply(p) == b.apply(a.apply(p))`.
     pub fn then(&self, next: &Transform) -> Transform {
-        let mut m = [[0.0; 3]; 3];
-        for (i, row) in m.iter_mut().enumerate() {
-            for (j, cell) in row.iter_mut().enumerate() {
-                *cell = (0..3).map(|k| next.m[i][k] * self.m[k][j]).sum();
-            }
-        }
+        let [a, b, c] = self.m;
+        let columns = [[a[0], b[0], c[0]], [a[1], b[1], c[1]], [a[2], b[2], c[2]]];
+        let m = next
+            .m
+            .map(|row| columns.map(|column| row.iter().zip(column).map(|(x, y)| x * y).sum()));
         Transform {
             m,
             t: next.apply(self.t),

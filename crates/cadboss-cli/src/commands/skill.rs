@@ -30,12 +30,18 @@ fn home() -> Result<PathBuf, Failure> {
         .ok_or_else(|| Failure::usage("cannot find the home directory (HOME or USERPROFILE)"))
 }
 
+fn base(global: bool) -> Result<PathBuf, Failure> {
+    if !global {
+        return Ok(PathBuf::from("."));
+    }
+    home()
+}
+
 pub fn run(args: &SkillArgs, out: &mut dyn Write) -> Result<(), Failure> {
     match args.action {
         SkillAction::Show => out.write_all(SKILL.as_bytes())?,
         SkillAction::Install { global } => {
-            let base = if global { home()? } else { PathBuf::from(".") };
-            let directory = base.join(".claude").join("skills").join("cadboss");
+            let directory = base(global)?.join(".claude").join("skills").join("cadboss");
             std::fs::create_dir_all(&directory)?;
             let path = directory.join("SKILL.md");
             std::fs::write(&path, SKILL)?;

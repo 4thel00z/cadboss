@@ -62,11 +62,8 @@ fn argument(after: &str) -> (&str, &str) {
         return (after, "");
     };
     let argument = after.get(..end).unwrap_or("");
-    let skip = if after.get(end..).is_some_and(|tail| tail.starts_with(';')) {
-        end + 1
-    } else {
-        end
-    };
+    let terminated = after.get(end..).is_some_and(|tail| tail.starts_with(';'));
+    let skip = end + usize::from(terminated);
     (argument, after.get(skip..).unwrap_or(""))
 }
 
