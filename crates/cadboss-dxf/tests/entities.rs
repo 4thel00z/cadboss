@@ -154,7 +154,7 @@ fn dimension_keeps_override_text_and_measurement() {
     let (entities, _) = decode_all(&bytes).unwrap();
     let (text, measurement, dim_type, block_name, style) = variant!(
         entities[0],
-        EntityKind::Dimension { text, measurement, dim_type, block_name, style }
+        EntityKind::Dimension { text, measurement, dim_type, block_name, style, .. }
             => (text, *measurement, *dim_type, block_name, style)
     );
     assert_eq!(text, &Text::from("<>mm"));
@@ -598,4 +598,14 @@ fn hyperlink_xdata_is_kept_on_the_entity() {
         Some(Text::from("https://example.com/spec"))
     );
     assert_eq!(entities[1].common.hyperlink, None);
+}
+
+#[test]
+fn foreign_xdata_without_a_url_leaves_the_hyperlink_empty() {
+    let bytes = DxfBuilder::new()
+        .line((0.0, 0.0), (1.0, 1.0))
+        .raw(1001, "ACAD")
+        .build();
+    let (entities, _) = decode_all(&bytes).unwrap();
+    assert_eq!(entities[0].common.hyperlink, None);
 }

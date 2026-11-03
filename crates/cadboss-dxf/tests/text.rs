@@ -16,6 +16,7 @@ fn simple_drawing_puts_pump_title_into_title_block_group() {
     let groups = DxfDocument::load(simple_drawing()).unwrap().text();
     assert_eq!(texts(&groups.title_block), ["TITLE: PUMP P-101"]);
     assert_eq!(groups.title_block[0].layout.to_string(), "Layout1");
+    assert_eq!(groups.title_block[0].position, Some(Point::xy(205.0, 15.0)));
     assert_eq!(texts(&groups.annotations), ["Hello"]);
 }
 
@@ -159,4 +160,60 @@ fn bottom_right_paper_text_without_a_title_block_insert_is_a_title_block_item() 
     let groups = DxfDocument::load(bytes).unwrap().text();
     assert_eq!(texts(&groups.title_block), ["stamp"]);
     assert_eq!(groups.annotations.len(), 2);
+}
+
+#[test]
+fn dimensions_without_a_measurement_and_without_text_are_skipped() {
+    let bytes = DxfBuilder::new()
+        .dimension_unmeasured("<>")
+        .dimension_unmeasured("")
+        .dimension_unmeasured("manual")
+        .build();
+    let groups = DxfDocument::load(bytes).unwrap().text();
+    assert_eq!(texts(&groups.annotations), ["manual"]);
+}
+
+#[test]
+fn bottom_right_quarter_boundaries_on_a_paper_layout() {
+    let bytes = DxfBuilder::new()
+        .paper_layout("Layout1")
+        .text("min", (0.0, 0.0), 1.0)
+        .text("max", (100.0, 100.0), 1.0)
+        .text("in", (80.0, 10.0), 1.0)
+        .text("high", (80.0, 30.0), 1.0)
+        .text("left", (70.0, 10.0), 1.0)
+        .build();
+    let groups = DxfDocument::load(bytes).unwrap().text();
+    assert_eq!(texts(&groups.title_block), ["in"]);
+    assert_eq!(groups.annotations.len(), 4);
+}
+
+#[test]
+fn text_height_is_scaled_by_the_insert_transform() {
+    let bytes = DxfBuilder::new()
+        .block("NOTE", (0.0, 0.0))
+        .text("inside", (1.0, 1.0), 2.5)
+        .end()
+        .insert_transformed("NOTE", (0.0, 0.0), (2.0, 2.0, 2.0), 0.0)
+        .build();
+    let groups = DxfDocument::load(bytes).unwrap().text();
+    assert_eq!(groups.annotations[0].height, Some(5.0));
+}
+
+#[test]
+fn dimension_items_use_the_text_midpoint_as_position() {
+    let bytes = DxfBuilder::new().dimension_at("", 4.0, (7.0, 9.0)).build();
+    let groups = DxfDocument::load(bytes).unwrap().text();
+    assert_eq!(groups.annotations[0].position, Some(Point::xy(7.0, 9.0)));
+}
+
+#[test]
+fn layout_tab_order_ranks_model_before_paper_layouts() {
+    let bytes = DxfBuilder::new()
+        .text("model", (0.0, 0.0), 1.0)
+        .paper_layout("Layout1")
+        .text("paper", (0.0, 100.0), 1.0)
+        .build();
+    let groups = DxfDocument::load(bytes).unwrap().text();
+    assert_eq!(texts(&groups.annotations), ["model", "paper"]);
 }

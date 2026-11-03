@@ -131,6 +131,11 @@ impl Transform {
         }
     }
 
+    /// Length of the transformed unit y vector, the factor by which text heights grow.
+    pub fn scale_factor(&self) -> f64 {
+        self.m[0][1].hypot(self.m[1][1])
+    }
+
     pub fn apply(&self, p: Point) -> Point {
         let row = |r: &[f64; 3]| r[0] * p.x + r[1] * p.y + r[2] * p.z;
         Point::new(
@@ -214,6 +219,14 @@ mod tests {
 
     fn close(a: f64, b: f64) -> bool {
         (a - b).abs() < 1e-9
+    }
+
+    #[test]
+    fn scale_factor_ignores_rotation_and_follows_the_y_scale() {
+        let scaled = Transform::insert(Point::default(), Point::new(2.0, 2.0, 2.0), 0.0);
+        assert!(close(scaled.scale_factor(), 2.0));
+        let turned = Transform::insert(Point::default(), Point::new(1.0, 1.0, 1.0), 90.0);
+        assert!(close(turned.scale_factor(), 1.0));
     }
 
     fn angle_close(a: f64, b: f64) -> bool {

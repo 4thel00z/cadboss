@@ -85,6 +85,7 @@ pub enum EntityKind {
     Dimension {
         text: Text,
         measurement: Option<f64>,
+        text_position: Option<Point>,
         dim_type: u16,
         block_name: Text,
         style: Text,

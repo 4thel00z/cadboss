@@ -556,6 +556,7 @@ fn dimension(fields: &mut Fields) -> EntityKind {
     EntityKind::Dimension {
         text: fields.text_unescaped(1).unwrap_or_default(),
         measurement: fields.float(42),
+        text_position: fields.point(11),
         dim_type: fields
             .int(70)
             .and_then(|kind| u16::try_from(kind & DIMENSION_TYPE_MASK).ok())

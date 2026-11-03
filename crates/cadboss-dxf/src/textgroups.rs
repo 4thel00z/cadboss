@@ -3,7 +3,7 @@
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 
-use cadboss_core::{BBox, Point, Report, Transform};
+use cadboss_core::{BBox, Point, Report, SkipKind, SkipReason, Transform};
 use cadboss_model::{
     Entity, EntityKind, Layout, LayoutKind, Text, TextGroups, TextItem, TextSource,
 };
@@ -38,23 +38,21 @@ pub(crate) fn collect(doc: &DxfDocument) -> (TextGroups, Report) {
     };
     for layout in doc.layouts() {
         let Some(name) = layout.name.as_str() else {
+            report.note(SkipKind::Object, SkipReason::Unsupported);
             continue;
         };
-        let extents = Some(layout.kind)
-            .filter(|kind| *kind == LayoutKind::Paper)
-            .and_then(|_| doc.layout_extents(name));
+        let extents = paper_extents(doc, layout, name);
         let sheet = Sheet { layout, extents };
         report.merge(doc.walk_with_path(name, &mut |entity, transform, path| {
             collector.visit(&sheet, entity, transform, path);
         }));
     }
     let mut groups = collector.finish(doc, &defs);
-    let layouts = doc.layouts();
-    groups.title_block = rank(groups.title_block, layouts);
-    groups.annotations = rank(groups.annotations, layouts);
-    groups.names = rank(groups.names, layouts);
-    groups.attributes = rank(groups.attributes, layouts);
-    groups.references = rank(groups.references, layouts);
+    let tabs = tab_map(doc.layouts());
+    groups.title_block = rank(groups.title_block, &tabs);
+    groups.annotations = rank(groups.annotations, &tabs);
+    groups.attributes = rank(groups.attributes, &tabs);
+    groups.references = rank(groups.references, &tabs);
     (groups, report)
 }
 
@@ -78,10 +76,16 @@ impl Collector {
                 entity,
                 path,
                 (text.clone(), TextSource::Annotation),
-                (Some(transform.apply(*position)), Some(*height)),
+                (
+                    Some(transform.apply(*position)),
+                    Some(height * transform.scale_factor()),
+                ),
             ),
             EntityKind::Dimension {
-                text, measurement, ..
+                text,
+                measurement,
+                text_position,
+                ..
             } => {
                 let Some(text) = dimension_text(text, *measurement) else {
                     return;
@@ -91,7 +95,7 @@ impl Collector {
                     entity,
                     path,
                     (text, TextSource::Dimension),
-                    (None, None),
+                    (text_position.map(|point| transform.apply(point)), None),
                 );
             }
             EntityKind::Leader {
@@ -116,7 +120,7 @@ impl Collector {
                         layer: entity.common.layer.clone(),
                         layout: sheet.layout.name.clone(),
                         position: Some(transform.apply(attribute.position)),
-                        height: Some(attribute.height),
+                        height: Some(attribute.height * transform.scale_factor()),
                     });
                 }
             }
@@ -216,6 +220,21 @@ impl Collector {
     }
 }
 
+fn paper_extents(doc: &DxfDocument, layout: &Layout, name: &str) -> Option<BBox> {
+    if layout.kind != LayoutKind::Paper {
+        return None;
+    }
+    doc.layout_extents(name)
+}
+
+fn tab_map(layouts: &[Layout]) -> HashMap<Vec<u8>, usize> {
+    let mut tabs = HashMap::new();
+    for (index, layout) in layouts.iter().enumerate() {
+        tabs.entry(bytes(&layout.name).to_vec()).or_insert(index);
+    }
+    tabs
+}
+
 fn unplaced(text: Text, source: TextSource) -> TextItem {
     TextItem {
         text,
@@ -259,14 +278,21 @@ fn bottom_right(extents: Option<BBox>, position: Option<Point>) -> bool {
 
 fn format_measurement(measurement: f64) -> String {
     let fixed = format!("{measurement:.2}");
-    fixed.trim_end_matches('0').trim_end_matches('.').to_owned()
+    let trimmed = fixed.trim_end_matches('0').trim_end_matches('.');
+    if trimmed == "-0" {
+        return "0".to_owned();
+    }
+    trimmed.to_owned()
 }
 
 fn dimension_text(text: &Text, measurement: Option<f64>) -> Option<Text> {
     let Some(raw) = text.as_str() else {
         return Some(text.clone()).filter(|text| !text.is_empty());
     };
-    let measured = measurement.map(format_measurement).unwrap_or_default();
+    let measured = measurement
+        .filter(|value| value.is_finite())
+        .map(format_measurement)
+        .unwrap_or_default();
     let shown = match raw {
         "" | "<>" => measured,
         other => other.replace("<>", &measured),
@@ -279,13 +305,6 @@ fn bytes(text: &Text) -> &[u8] {
         Text::Str(text) => text.as_bytes(),
         Text::Bytes(bytes) => bytes,
     }
-}
-
-fn tab(layouts: &[Layout], layout: &Text) -> usize {
-    layouts
-        .iter()
-        .position(|candidate| candidate.name == *layout)
-        .unwrap_or(usize::MAX)
 }
 
 fn compare(first: &(usize, TextItem), second: &(usize, TextItem)) -> Ordering {
@@ -302,10 +321,15 @@ fn compare(first: &(usize, TextItem), second: &(usize, TextItem)) -> Ordering {
     }
 }
 
-fn rank(items: Vec<TextItem>, layouts: &[Layout]) -> Vec<TextItem> {
+fn rank(items: Vec<TextItem>, tabs: &HashMap<Vec<u8>, usize>) -> Vec<TextItem> {
     let mut ranked: Vec<(usize, TextItem)> = items
         .into_iter()
-        .map(|item| (tab(layouts, &item.layout), item))
+        .map(|item| {
+            (
+                tabs.get(bytes(&item.layout)).copied().unwrap_or(usize::MAX),
+                item,
+            )
+        })
         .collect();
     ranked.sort_by(compare);
     ranked.into_iter().map(|(_, item)| item).collect()

@@ -181,7 +181,8 @@ enum Kind {
     },
     Dimension {
         text: String,
-        measurement: f64,
+        measurement: Option<f64>,
+        at: (f64, f64),
     },
     Image {
         definition: usize,
@@ -471,9 +472,22 @@ impl DxfBuilder {
     }
 
     pub fn dimension(self, text_override: &str, measurement: f64) -> DxfBuilder {
+        self.dimension_at(text_override, measurement, (0.0, 0.0))
+    }
+
+    pub fn dimension_at(self, text_override: &str, measurement: f64, at: (f64, f64)) -> DxfBuilder {
         self.push(Kind::Dimension {
             text: text_override.to_string(),
-            measurement,
+            measurement: Some(measurement),
+            at,
+        })
+    }
+
+    pub fn dimension_unmeasured(self, text_override: &str) -> DxfBuilder {
+        self.push(Kind::Dimension {
+            text: text_override.to_string(),
+            measurement: None,
+            at: (0.0, 0.0),
         })
     }
 
@@ -920,15 +934,21 @@ fn write_body(out: &mut Out, entity: &Entity) -> Vec<(String, String)> {
             }
             return attribs.clone();
         }
-        Kind::Dimension { text, measurement } => {
+        Kind::Dimension {
+            text,
+            measurement,
+            at,
+        } => {
             out.dimensions += 1;
             out.s(2, &format!("*D{}", out.dimensions));
             out.point(10, 0.0, 0.0, 0.0);
-            out.point(11, 0.0, 0.0, 0.0);
+            out.point(11, at.0, at.1, 0.0);
             out.n(70, 0);
             out.s(1, text);
             out.s(3, "Standard");
-            out.f(42, *measurement);
+            if let Some(measurement) = measurement {
+                out.f(42, *measurement);
+            }
             out.s(100, "AcDbAlignedDimension");
             out.point(13, 0.0, 0.0, 0.0);
             out.point(14, 0.0, 0.0, 0.0);
