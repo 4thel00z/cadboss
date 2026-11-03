@@ -85,6 +85,7 @@ version = "0.1.0"
 dependencies = [
  "cadboss-core",
  "cadboss-model",
+ "cadboss-testkit",
  "memchr",
 ]
 
