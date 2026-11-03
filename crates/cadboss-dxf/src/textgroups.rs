@@ -13,7 +13,7 @@ use crate::document::{DxfDocument, LayoutPass};
 const TITLE_MARKERS: [&str; 4] = ["TITLE", "TBLK", "SCHRIFTFELD", "CARTOUCHE"];
 const BOTTOM_RIGHT_SHARE: f64 = 0.25;
 
-/// An annotation waiting for its layout's extents; `titled` is set when the entity sits inside a title-block insert.
+/// An annotation of a paper layout waiting for that layout's extents; `titled` is set when the entity sits inside a title-block insert.
 struct Pending {
     item: TextItem,
     titled: bool,
@@ -188,7 +188,7 @@ impl Collector {
         if text.is_empty() {
             return;
         }
-        self.pending.push(Pending {
+        let pending = Pending {
             item: TextItem {
                 text,
                 source,
@@ -198,16 +198,26 @@ impl Collector {
                 height,
             },
             titled: in_title_block(path),
-        });
+        };
+        if layout.kind == LayoutKind::Paper {
+            self.pending.push(pending);
+            return;
+        }
+        self.place(pending, None);
     }
 
+    fn place(&mut self, pending: Pending, extents: Option<BBox>) {
+        if pending.titled || bottom_right(extents, pending.item.position) {
+            self.groups.title_block.push(pending.item);
+            return;
+        }
+        self.groups.annotations.push(pending.item);
+    }
+
+    /// Places the annotations of a paper layout once its walk has produced the extents.
     fn settle(&mut self, extents: Option<BBox>) {
-        for pending in self.pending.drain(..) {
-            if pending.titled || bottom_right(extents, pending.item.position) {
-                self.groups.title_block.push(pending.item);
-                continue;
-            }
-            self.groups.annotations.push(pending.item);
+        for pending in std::mem::take(&mut self.pending) {
+            self.place(pending, extents);
         }
     }
 
@@ -316,12 +326,12 @@ fn dimension_text(text: &Text, measurement: Option<f64>) -> Option<Text> {
         .map(Text::from)
 }
 
-fn compare(first: &(usize, TextItem), second: &(usize, TextItem)) -> Ordering {
-    match (first.1.position, second.1.position) {
-        (Some(a), Some(b)) => first
-            .0
-            .cmp(&second.0)
-            .then_with(|| first.1.layer.as_bytes().cmp(second.1.layer.as_bytes()))
+/// Positioned items first, by layout tab order, layer, top to bottom and left to right; unpositioned items keep their order.
+fn compare(first: &TextItem, second: &TextItem, tab: &dyn Fn(&TextItem) -> usize) -> Ordering {
+    match (first.position, second.position) {
+        (Some(a), Some(b)) => tab(first)
+            .cmp(&tab(second))
+            .then_with(|| first.layer.as_bytes().cmp(second.layer.as_bytes()))
             .then_with(|| b.y.total_cmp(&a.y))
             .then_with(|| a.x.total_cmp(&b.x)),
         (Some(_), None) => Ordering::Less,
@@ -330,18 +340,12 @@ fn compare(first: &(usize, TextItem), second: &(usize, TextItem)) -> Ordering {
     }
 }
 
-fn rank(items: Vec<TextItem>, tabs: &HashMap<Vec<u8>, usize>) -> Vec<TextItem> {
-    let mut ranked: Vec<(usize, TextItem)> = items
-        .into_iter()
-        .map(|item| {
-            (
-                tabs.get(item.layout.as_bytes())
-                    .copied()
-                    .unwrap_or(usize::MAX),
-                item,
-            )
-        })
-        .collect();
-    ranked.sort_by(compare);
-    ranked.into_iter().map(|(_, item)| item).collect()
+fn rank(mut items: Vec<TextItem>, tabs: &HashMap<Vec<u8>, usize>) -> Vec<TextItem> {
+    let tab = |item: &TextItem| {
+        tabs.get(item.layout.as_bytes())
+            .copied()
+            .unwrap_or(usize::MAX)
+    };
+    items.sort_by(|first, second| compare(first, second, &tab));
+    items
 }
