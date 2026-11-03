@@ -22,9 +22,13 @@ jobs:
       - run: uv sync
       - run: uv run maturin develop
       - run: uv run pytest tests -q
-      - run: uv run maturin build --release
+      - run: uv run maturin build --release --out dist
       - run: |
-          uv run python -c "
+          uv venv .wheel-venv
+          uv pip install --python .wheel-venv/bin/python dist/*.whl
+      - working-directory: ${{ runner.temp }}
+        run: |
+          "$GITHUB_WORKSPACE/.wheel-venv/bin/python" -c "
           import cadboss
           try:
               cadboss.Document.load(b'garbage')

@@ -33,9 +33,9 @@ def test_load_bytes_equals_open(simple_dxf_path: Path, simple_dxf_bytes: bytes) 
 def test_text_title_block_group(simple_dxf_bytes: bytes) -> None:
     doc = Document.load(simple_dxf_bytes)
     items = doc.text("title-block")
-    everything = doc.text()
-    assert len(everything) >= len(items)
-    assert all(item in everything for item in items)
+    assert items
+    assert all("TITLE: PUMP P-101" in str(item.text) for item in items)
+    assert len(items) < len(doc.text())
 
 
 def test_markdown_starts_with_title(simple_dxf_bytes: bytes) -> None:
@@ -72,8 +72,11 @@ def test_bad_budget_and_type_errors(simple_dxf_bytes: bytes) -> None:
         Document.load(simple_dxf_bytes, budget={"max_bytes": -1})
     with pytest.raises(CadError):
         Document.load(simple_dxf_bytes, budget={"max_bytes": 10})
+    with pytest.raises(ValueError):
+        Document.load(simple_dxf_bytes, budget={"max_bytes": True})
+    not_bytes: object = "text"
     with pytest.raises(TypeError):
-        Document.load("text")  # type: ignore[arg-type]
+        Document.load(not_bytes)  
 
 
 def test_document_is_usable_from_threads(simple_dxf_bytes: bytes) -> None:

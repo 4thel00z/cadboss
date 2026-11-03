@@ -12,7 +12,7 @@ use cadboss_output::{to_json, to_json_compact, to_markdown};
 use pyo3::buffer::PyBuffer;
 use pyo3::exceptions::{PyException, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyDict, PyString};
+use pyo3::types::{PyBool, PyBytes, PyDict, PyString};
 
 pyo3::create_exception!(
     cadboss,
@@ -94,6 +94,11 @@ fn options(budget: Option<&Bound<'_, PyDict>>) -> PyResult<Options> {
         let key: String = key
             .extract()
             .map_err(|_| PyValueError::new_err("budget keys must be strings"))?;
+        if value.is_instance_of::<PyBool>() {
+            return Err(PyValueError::new_err(format!(
+                "budget value for {key} must be an integer, not a bool"
+            )));
+        }
         let value: u64 = value.extract().map_err(|_| {
             PyValueError::new_err(format!(
                 "budget value for {key} must be a non-negative integer"
@@ -307,7 +312,7 @@ impl PyDocument {
         let options = options(budget)?;
         let buffer = PyBuffer::<u8>::get(data)
             .map_err(|_| PyTypeError::new_err("data must be bytes, bytearray or memoryview"))?;
-        let bytes: Arc<[u8]> = buffer.to_vec(py)?.into();
+        let bytes: Arc<[u8]> = Arc::from(buffer.to_vec(py)?.into_boxed_slice());
         let document = py
             .allow_threads(|| {
                 DxfDocument::load_with_options(bytes, &options).map(|doc| doc.document())
