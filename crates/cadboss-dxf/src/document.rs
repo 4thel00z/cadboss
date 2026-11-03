@@ -480,7 +480,13 @@ impl DxfDocument {
 
     /// Bounding box of every entity visited by `walk`, with text and MTEXT counted at their insertion point; `None` for an empty or unknown layout.
     pub fn layout_extents(&self, layout: &str) -> Option<BBox> {
-        self.pass(layout, &mut |_| {}, &mut |_, _, _| {}).extents
+        self.layout_extents_reporting(layout).0
+    }
+
+    /// `layout_extents` with the walk-level notes of its walk.
+    pub fn layout_extents_reporting(&self, layout: &str) -> (Option<BBox>, Report) {
+        let pass = self.pass(layout, &mut |_| {}, &mut |_, _, _| {});
+        (pass.extents, pass.walked)
     }
 }
 

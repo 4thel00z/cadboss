@@ -573,3 +573,19 @@ fn walk_report_has_no_entity_decode_notes() -> Result<(), Error> {
     assert!(report.is_empty());
     Ok(())
 }
+
+#[test]
+fn layout_extents_reporting_returns_the_walk_notes() -> Result<(), Error> {
+    let document = DxfDocument::load(nested_inserts(70))?;
+    let (extents, report) = document.layout_extents_reporting("Model");
+    assert_eq!(extents, document.layout_extents("Model"));
+    assert!(extents.is_some());
+    assert_eq!(
+        noted(&report, SkipKind::Entity, SkipReason::NestingLimit),
+        1
+    );
+    let (missing, quiet) = document.layout_extents_reporting("Nowhere");
+    assert!(missing.is_none());
+    assert!(quiet.is_empty());
+    Ok(())
+}
