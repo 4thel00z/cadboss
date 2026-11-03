@@ -31,7 +31,7 @@ pub enum SectionName {
 }
 
 impl SectionName {
-    pub fn from_bytes(name: &[u8]) -> SectionName {
+    pub(crate) fn from_bytes(name: &[u8]) -> SectionName {
         match name {
             b"HEADER" => SectionName::Header,
             b"CLASSES" => SectionName::Classes,
@@ -160,8 +160,7 @@ impl<'t> Cursor<'t> {
         Some(self.tape.code(self.index))
     }
 
-    #[allow(clippy::should_implement_trait)]
-    pub fn next(&mut self) -> Option<(i16, &'t [u8])> {
+    fn advance(&mut self) -> Option<(i16, &'t [u8])> {
         if self.index >= self.end {
             return None;
         }
@@ -189,5 +188,13 @@ impl<'t> Cursor<'t> {
 
     pub fn handle(&self, value: &[u8]) -> Option<u64> {
         u64::from_str_radix(std::str::from_utf8(value).ok()?.trim(), 16).ok()
+    }
+}
+
+impl<'t> Iterator for Cursor<'t> {
+    type Item = (i16, &'t [u8]);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.advance()
     }
 }

@@ -70,7 +70,7 @@ fn looks_like_dxf(bytes: &[u8], mut pos: usize) -> bool {
         if trim_blanks(text).is_empty() {
             continue;
         }
-        return parse_integer(text).is_some();
+        return parse_code(text).is_some();
     }
     false
 }
@@ -121,7 +121,7 @@ impl Builder {
         if self.awaiting_name {
             self.awaiting_name = false;
             if code == 2 {
-                self.open = Some((SectionName::from_bytes(value), index + 1));
+                self.open = Some((SectionName::from_bytes(value), index.saturating_add(1)));
                 return false;
             }
             self.report.note(SkipKind::Section, SkipReason::Malformed);
@@ -130,7 +130,7 @@ impl Builder {
         if code != 0 {
             return false;
         }
-        match value {
+        match trim_blanks(value) {
             b"SECTION" => {
                 self.close(index, Some(SkipReason::Truncated));
                 self.awaiting_name = true;
@@ -144,20 +144,24 @@ impl Builder {
                 self.close(index, None);
                 false
             }
-            b"EOF" => true,
+            b"EOF" => {
+                self.close(index, Some(SkipReason::Truncated));
+                true
+            }
             _ => false,
         }
     }
 }
 
 pub(crate) fn lex_ascii(bytes: &[u8], budget: &Budget) -> Result<(Tape, Report)> {
-    budget.check_bytes(bytes.len() as u64)?;
     let mut pos = if bytes.starts_with(BOM) { BOM.len() } else { 0 };
     if !looks_like_dxf(bytes, pos) {
         return Err(Error::NotDxf);
     }
+    let lines = memchr::memchr_iter(b'\n', bytes).count() + 1;
+    let reserve = usize::try_from(budget.max_tokens).map_or(lines / 2, |max| max.min(lines / 2));
     let mut builder = Builder {
-        tokens: Vec::with_capacity(bytes.len() / 12),
+        tokens: Vec::with_capacity(reserve),
         long_values: Vec::new(),
         sections: Vec::new(),
         open: None,
@@ -166,6 +170,10 @@ pub(crate) fn lex_ascii(bytes: &[u8], budget: &Budget) -> Result<(Tape, Report)>
     };
     let mut previous_malformed = false;
     while let Some(code_line) = next_line(bytes, pos) {
+        if builder.tokens.len() as u64 >= budget.max_tokens {
+            builder.report.note(SkipKind::Token, SkipReason::TokenLimit);
+            break;
+        }
         let code_text = bytes.get(code_line.start..code_line.end).unwrap_or(&[]);
         let Some(code) = parse_code(code_text) else {
             if !previous_malformed {

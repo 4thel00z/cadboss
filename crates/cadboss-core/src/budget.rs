@@ -7,6 +7,7 @@ pub struct Budget {
     pub max_layouts: u32,
     pub max_nesting: u32,
     pub max_string_bytes: u32,
+    pub max_tokens: u64,
 }
 
 impl Default for Budget {
@@ -17,6 +18,7 @@ impl Default for Budget {
             max_layouts: 200,
             max_nesting: 64,
             max_string_bytes: 1024 * 1024,
+            max_tokens: 64_000_000,
         }
     }
 }
@@ -45,6 +47,7 @@ mod tests {
         assert_eq!(budget.max_layouts, 200);
         assert_eq!(budget.max_nesting, 64);
         assert_eq!(budget.max_string_bytes, 1024 * 1024);
+        assert_eq!(budget.max_tokens, 64_000_000);
     }
 
     #[test]

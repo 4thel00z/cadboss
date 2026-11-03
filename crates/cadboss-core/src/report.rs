@@ -48,6 +48,7 @@ pub enum SkipReason {
     StringLimit,
     UnsupportedCodepage,
     Unsupported,
+    TokenLimit,
 }
 
 impl SkipReason {
@@ -61,6 +62,7 @@ impl SkipReason {
             SkipReason::StringLimit => "string_limit",
             SkipReason::UnsupportedCodepage => "unsupported_codepage",
             SkipReason::Unsupported => "unsupported",
+            SkipReason::TokenLimit => "token_limit",
         }
     }
 }

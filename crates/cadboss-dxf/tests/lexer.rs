@@ -222,3 +222,67 @@ fn binary_sentinel_is_recognized_but_unsupported_for_now() {
     );
     assert!(matches!(result, Err(Error::Unsupported("binary dxf"))));
 }
+
+#[test]
+fn lexer_stops_at_the_token_budget_and_reports() {
+    let bytes = b"  0\nSECTION\n  2\nHEADER\n  9\n$ACADVER\n  1\nAC1027\n  0\nENDSEC\n  0\nEOF\n";
+    let budget = Budget {
+        max_tokens: 4,
+        ..Budget::default()
+    };
+    let (tape, report) = Tape::lex(bytes, &budget).unwrap();
+    assert_eq!(tape.len(), 4);
+    assert!(report.skipped.contains(&Skipped {
+        kind: SkipKind::Token,
+        reason: SkipReason::TokenLimit,
+        count: 1
+    }));
+    assert!(report.skipped.contains(&Skipped {
+        kind: SkipKind::Section,
+        reason: SkipReason::Truncated,
+        count: 1
+    }));
+    assert_eq!(tape.section(SectionName::Header).unwrap().end, 4);
+}
+
+#[test]
+fn a_section_open_at_eof_ends_at_the_eof_token() {
+    let bytes = b"  0\nSECTION\n  2\nENTITIES\n  0\nLINE\n  0\nEOF\n";
+    let (tape, report) = lex(bytes).unwrap();
+    assert_eq!(
+        report.skipped,
+        vec![Skipped {
+            kind: SkipKind::Section,
+            reason: SkipReason::Truncated,
+            count: 1
+        }]
+    );
+    assert_eq!(tape.section(SectionName::Entities).unwrap().end, 3);
+}
+
+#[test]
+fn lexer_matches_padded_structure_values() {
+    let bytes = b"  0\nSECTION \n  2\nHEADER\n  0\n ENDSEC\n  0\nEOF \n";
+    let (tape, report) = lex(bytes).unwrap();
+    assert!(report.is_empty());
+    assert_eq!(tape.section(SectionName::Header).unwrap().end, 2);
+}
+
+#[test]
+fn a_first_line_beyond_i16_is_not_dxf() {
+    assert!(matches!(lex(b"99999\nfoo\n"), Err(Error::NotDxf)));
+}
+
+#[test]
+fn two_separate_malformed_runs_count_twice() {
+    let bytes = b"999\nc\nxx\nyy\n  0\nLINE\nzz\nww\n";
+    let (_, report) = lex(bytes).unwrap();
+    assert_eq!(
+        report.skipped,
+        vec![Skipped {
+            kind: SkipKind::Token,
+            reason: SkipReason::Malformed,
+            count: 2
+        }]
+    );
+}
