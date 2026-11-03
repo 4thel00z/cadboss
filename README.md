@@ -46,9 +46,10 @@ In the memory gate run in `benchmarks/results-2026-11-03.json`, a 300 MB DXF wit
 
 ## Development
 
-Run `make help` to list every target. `make ci` runs the checks CI runs and `make test-py` runs the Python tests.
+Run `make help` to list every target. `make ci` runs the fmt, lint, test and doc checks of CI and `make test-py` runs the Python tests.
 
 - `make samples` downloads the public sample drawings listed in `tests/samples/manifest.toml` and verifies their SHA-256 hashes. `cargo test -p cadboss-dxf --test samples` opens every downloaded sample and skips the rest.
+- `make package` runs `cargo package` for the five published crates and builds each one from its packaged sources, as CI does on every push. Cargo reuses the sources it unpacked for a crate version it verified before, so a local re-run after changing code at the same version can build stale copies; delete the `cadboss-*` directories under the nameless registry in `~/.cargo/registry/src/` first.
 - `make bench` runs the criterion benchmarks. `benchmarks/README.md` describes the memory gate.
 - `make fuzz` seeds `fuzz/corpus/dxf_load` from `tests/fixtures`, runs the DXF fuzz target for `FUZZ_SECONDS` (default 60) with a 10 second per-input timeout and a 1024 MB RSS limit, and skips without a nightly toolchain and `cargo-fuzz`.
 
