@@ -159,6 +159,16 @@ impl<'t> Cursor<'t> {
         Some(self.tape.code(self.index))
     }
 
+    pub fn peek(&self) -> Option<(i16, &'t [u8])> {
+        if self.index >= self.end {
+            return None;
+        }
+        Some((
+            self.tape.code(self.index),
+            self.tape.value(self.index, self.bytes),
+        ))
+    }
+
     fn advance(&mut self) -> Option<(i16, &'t [u8])> {
         if self.index >= self.end {
             return None;

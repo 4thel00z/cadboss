@@ -107,6 +107,7 @@ pub enum EntityKind {
     },
     Image {
         path: Option<Text>,
+        image_def: Option<u64>,
         position: Point,
         size: Point,
     },
