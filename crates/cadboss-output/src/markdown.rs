@@ -1,5 +1,7 @@
+use std::collections::HashMap;
+
 use cadboss_core::BBox;
-use cadboss_model::{Document, Layout, TextItem};
+use cadboss_model::{Document, Layout, Text, TextItem};
 
 pub fn to_markdown(doc: &Document, title: &str) -> String {
     let mut blocks = vec![format!("# {title}"), metadata(doc)];
@@ -75,22 +77,22 @@ fn layout_blocks(doc: &Document, layout: &Layout) -> Vec<String> {
 }
 
 fn layer_groups(annotations: &[&TextItem]) -> Vec<String> {
-    let mut layers: Vec<&TextItem> = Vec::new();
+    let mut positions: HashMap<&Text, usize> = HashMap::new();
+    let mut layers: Vec<Vec<&TextItem>> = Vec::new();
     for item in annotations {
-        if !layers.iter().any(|seen| seen.layer == item.layer) {
-            layers.push(item);
-        }
+        let position = *positions.entry(&item.layer).or_insert(layers.len());
+        let Some(layer) = layers.get_mut(position) else {
+            layers.push(vec![*item]);
+            continue;
+        };
+        layer.push(item);
     }
     layers
         .iter()
-        .map(|first| {
+        .filter_map(|items| {
+            let first = items.first()?;
             let heading = format!("#### Layer {}", inline(&first.layer.to_string()));
-            let items = annotations
-                .iter()
-                .filter(|item| item.layer == first.layer)
-                .copied()
-                .map(annotation);
-            bullets(&heading, items)
+            Some(bullets(&heading, items.iter().copied().map(annotation)))
         })
         .collect()
 }

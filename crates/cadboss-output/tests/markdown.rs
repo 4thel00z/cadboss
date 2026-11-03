@@ -114,3 +114,28 @@ fn markdown_formats_height_12_345_as_12_35() {
     let document = model_document(vec![item("Hi".into(), "0", Some(12.345))]);
     assert!(to_markdown(&document, "t").contains("(h 12.35)"));
 }
+
+#[test]
+fn markdown_groups_fifty_thousand_distinct_layers_in_under_two_seconds() {
+    let annotations = (0..50_000)
+        .map(|index| item(format!("t{index}").into(), &format!("L{index}"), Some(1.0)))
+        .collect();
+    let document = model_document(annotations);
+    let started = std::time::Instant::now();
+    let markdown = to_markdown(&document, "layers");
+    let elapsed = started.elapsed();
+    assert!(elapsed.as_secs_f64() < 2.0, "took {elapsed:?}");
+    assert_eq!(markdown.matches("#### Layer ").count(), 50_000);
+    assert!(markdown.contains("#### Layer L49999\n\n- t49999 (h 1)"));
+}
+
+#[test]
+fn markdown_keeps_first_seen_layer_order_and_item_order_within_a_layer() {
+    let document = model_document(vec![
+        item("b1".into(), "B", None),
+        item("a1".into(), "A", None),
+        item("b2".into(), "B", None),
+    ]);
+    let markdown = to_markdown(&document, "t");
+    assert!(markdown.contains("#### Layer B\n\n- b1\n- b2\n\n#### Layer A\n\n- a1"));
+}

@@ -5,7 +5,7 @@ use std::fmt;
 use serde::ser::SerializeMap;
 use serde::{Serialize, Serializer};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Text {
     Str(String),
     Bytes(Vec<u8>),
