@@ -53,6 +53,19 @@ fn int_value(code: i16, n: i64) -> Value {
     }
 }
 
+fn typed_value(code: i16, text: &str) -> Value {
+    let text = text.trim();
+    let parsed = match width(code) {
+        Width::F64 => text.parse().map(Value::F64).ok(),
+        Width::I16 => text.parse().map(Value::I16).ok(),
+        Width::I32 => text.parse().map(Value::I32).ok(),
+        Width::I64 => text.parse().map(Value::I64).ok(),
+        Width::Bool => text.parse::<i64>().map(|n| Value::Bool(n != 0)).ok(),
+        Width::Str => None,
+    };
+    parsed.unwrap_or_else(|| Value::Str(text.to_string()))
+}
+
 fn hex(handle: u64) -> String {
     format!("{handle:X}")
 }
@@ -467,7 +480,7 @@ impl DxfBuilder {
     }
 
     pub fn raw(self, code: i16, value: &str) -> DxfBuilder {
-        self.push(Kind::Raw(code, Value::Str(value.to_string())))
+        self.push(Kind::Raw(code, typed_value(code, value)))
     }
 
     pub fn build(self) -> Vec<u8> {
@@ -602,10 +615,9 @@ impl DxfBuilder {
             MODEL_SPACE,
             Some(plan.model_layout),
         );
-        for (index, handle) in plan.paper_records.iter().enumerate() {
-            let layout = plan.layouts.get(index).copied();
+        for (index, (handle, layout)) in plan.paper_records.iter().zip(&plan.layouts).enumerate() {
             let name = paper_block_name(index);
-            write_block_record(out, plan.record_table, *handle, &name, layout);
+            write_block_record(out, plan.record_table, *handle, &name, Some(*layout));
         }
         for (block, handle) in self.blocks.iter().zip(&plan.block_records) {
             write_block_record(out, plan.record_table, *handle, &block.name, None);
@@ -618,15 +630,12 @@ impl DxfBuilder {
         out.begin("BLOCKS");
         write_block(out, MODEL_SPACE, plan.model_record, (0.0, 0.0), None);
         write_block_end(out, plan.model_record);
-        for (index, handle) in plan.paper_records.iter().enumerate() {
+        for (index, (layout, handle)) in self.layouts.iter().zip(&plan.paper_records).enumerate() {
             write_block(out, &paper_block_name(index), *handle, (0.0, 0.0), None);
-            let extra = index > 0;
-            let entities = self
-                .layouts
-                .get(index)
-                .map(|layout| layout.entities.as_slice());
-            for entity in entities.unwrap_or_default().iter().filter(|_| extra) {
-                write_entity(out, entity, *handle, true);
+            if index > 0 {
+                for entity in &layout.entities {
+                    write_entity(out, entity, *handle, true);
+                }
             }
             write_block_end(out, *handle);
         }
@@ -645,17 +654,10 @@ impl DxfBuilder {
         for entity in &self.entities {
             write_entity(out, entity, plan.model_record, false);
         }
-        let builtin = self
-            .layouts
-            .first()
-            .map(|layout| layout.entities.as_slice());
-        let owner = plan
-            .paper_records
-            .first()
-            .copied()
-            .unwrap_or(plan.model_record);
-        for entity in builtin.unwrap_or_default() {
-            write_entity(out, entity, owner, true);
+        if let (Some(layout), Some(owner)) = (self.layouts.first(), plan.paper_records.first()) {
+            for entity in &layout.entities {
+                write_entity(out, entity, *owner, true);
+            }
         }
         out.end();
     }
@@ -683,18 +685,13 @@ impl DxfBuilder {
         }
 
         write_layout(out, plan, "Model", plan.model_layout, 0, plan.model_record);
-        for (index, layout) in self.layouts.iter().enumerate() {
-            let handle = plan
-                .layouts
-                .get(index)
-                .copied()
-                .unwrap_or(plan.model_layout);
-            let record = plan
-                .paper_records
-                .get(index)
-                .copied()
-                .unwrap_or(plan.model_record);
-            write_layout(out, plan, &layout.name, handle, index + 1, record);
+        let sheets = self
+            .layouts
+            .iter()
+            .zip(&plan.layouts)
+            .zip(&plan.paper_records);
+        for (index, ((layout, handle), record)) in sheets.enumerate() {
+            write_layout(out, plan, &layout.name, *handle, index + 1, *record);
         }
 
         for path in &self.imagedefs {
@@ -975,6 +972,10 @@ fn write_ascii(records: &[Record], crlf: bool) -> Vec<u8> {
 }
 
 pub fn simple_drawing() -> Vec<u8> {
+    simple_builder().build()
+}
+
+pub fn simple_builder() -> DxfBuilder {
     DxfBuilder::new()
         .layer("DIM", 1)
         .block("TITLEBLOCK", (0.0, 0.0))
@@ -989,7 +990,6 @@ pub fn simple_drawing() -> Vec<u8> {
         .paper_layout("Layout1")
         .insert("TITLEBLOCK", (200.0, 10.0))
         .end()
-        .build()
 }
 
 pub fn large_drawing(entities: usize) -> Vec<u8> {
@@ -1097,5 +1097,229 @@ mod tests {
     fn large_drawing_writes_n_lines() {
         let bytes = large_drawing(250);
         assert_eq!(count_records(&bytes, SectionName::Entities, b"LINE"), 250);
+    }
+
+    type Pairs = Vec<(i16, Vec<u8>)>;
+
+    fn section_pairs(bytes: &[u8], section: SectionName) -> Pairs {
+        let (tape, _) = Tape::lex(bytes, &Budget::default()).unwrap();
+        let range = tape.section(section).unwrap();
+        Cursor::new(&tape, bytes, range.start..range.end)
+            .map(|(code, value)| (code, value.to_vec()))
+            .collect()
+    }
+
+    fn records(pairs: &Pairs) -> Vec<Pairs> {
+        let mut out: Vec<Pairs> = Vec::new();
+        for (code, value) in pairs {
+            if *code == 0 {
+                out.push(Vec::new());
+            }
+            if let Some(last) = out.last_mut() {
+                last.push((*code, value.clone()));
+            }
+        }
+        out
+    }
+
+    fn first(record: &Pairs, code: i16) -> Vec<u8> {
+        record
+            .iter()
+            .find(|(c, _)| *c == code)
+            .map(|(_, v)| v.clone())
+            .unwrap()
+    }
+
+    fn text(value: &[u8]) -> String {
+        String::from_utf8(value.to_vec()).unwrap()
+    }
+
+    fn entity_records(bytes: &[u8]) -> Vec<Pairs> {
+        records(&section_pairs(bytes, SectionName::Entities))
+    }
+
+    #[test]
+    fn mtext_splits_long_text_into_250_byte_chunks_and_a_final_chunk() {
+        let bytes = DxfBuilder::new()
+            .mtext(&"a".repeat(600), (0.0, 0.0), 2.5)
+            .build();
+        let mtext = &entity_records(&bytes)[0];
+        let leading: Vec<usize> = mtext
+            .iter()
+            .filter(|(c, _)| *c == 3)
+            .map(|(_, v)| v.len())
+            .collect();
+        assert_eq!(leading, vec![250, 250]);
+        assert_eq!(first(mtext, 1).len(), 100);
+    }
+
+    #[test]
+    fn mtext_never_splits_a_multibyte_character() {
+        let original = "é".repeat(300);
+        let bytes = DxfBuilder::new().mtext(&original, (0.0, 0.0), 2.5).build();
+        let mtext = &entity_records(&bytes)[0];
+        let joined: String = mtext
+            .iter()
+            .filter(|(c, _)| *c == 3 || *c == 1)
+            .map(|(_, v)| text(v))
+            .collect();
+        assert_eq!(joined, original);
+        assert!(mtext
+            .iter()
+            .filter(|(c, _)| *c == 3)
+            .all(|(_, v)| v.len() <= 250));
+    }
+
+    #[test]
+    fn insert_with_attribs_writes_flag_attribs_and_seqend() {
+        let bytes = DxfBuilder::new()
+            .insert_with_attribs("B", (1.0, 2.0), &[("TAG1", "v1"), ("TAG2", "v2")])
+            .build();
+        let all = entity_records(&bytes);
+        let names: Vec<String> = all.iter().map(|r| text(&r[0].1)).collect();
+        assert_eq!(names, ["INSERT", "ATTRIB", "ATTRIB", "SEQEND"]);
+        assert!(all[0].contains(&(66, b"1".to_vec())));
+        assert_eq!(first(&all[1], 2), b"TAG1");
+        assert_eq!(first(&all[1], 1), b"v1");
+        assert_eq!(first(&all[2], 2), b"TAG2");
+        assert_eq!(first(&all[2], 1), b"v2");
+    }
+
+    #[test]
+    fn dimension_writes_name_override_and_measurement() {
+        let bytes = DxfBuilder::new().dimension("<>mm", 42.5).build();
+        let dimension = &entity_records(&bytes)[0];
+        assert_eq!(first(dimension, 2), b"*D1");
+        assert_eq!(first(dimension, 1), b"<>mm");
+        assert_eq!(first(dimension, 42), b"42.5");
+    }
+
+    #[test]
+    fn hyperlink_writes_the_url_xdata_sequence() {
+        let bytes = DxfBuilder::new()
+            .line((0.0, 0.0), (1.0, 1.0))
+            .hyperlink("http://x.test/a")
+            .build();
+        let line = &entity_records(&bytes)[0];
+        let tail: Vec<(i16, Vec<u8>)> = line[line.len() - 4..].to_vec();
+        assert_eq!(
+            tail,
+            vec![
+                (1001, b"PE_URL".to_vec()),
+                (1002, b"{".to_vec()),
+                (1000, b"http://x.test/a".to_vec()),
+                (1002, b"}".to_vec()),
+            ]
+        );
+    }
+
+    #[test]
+    fn text_bytes_reach_ascii_verbatim_and_binary_nul_terminated() {
+        let ascii = DxfBuilder::new()
+            .text_bytes(b"caf\xE9", (0.0, 0.0), 2.5)
+            .build();
+        assert!(ascii.windows(6).any(|w| w == b"\ncaf\xE9\n"));
+        let binary = DxfBuilder::new()
+            .binary()
+            .text_bytes(b"caf\xE9", (0.0, 0.0), 2.5)
+            .build();
+        assert!(binary.windows(5).any(|w| w == b"caf\xE9\0"));
+    }
+
+    #[test]
+    fn binary_values_round_trip_for_every_width_class() {
+        let bytes = DxfBuilder::new()
+            .binary()
+            .line((1.5, 2.5), (3.0, 4.0))
+            .lwpolyline(&[(0.0, 0.0, 0.0), (1.0, 1.0, 0.0)], true)
+            .raw(160, "7")
+            .raw(290, "1")
+            .build();
+        let (tape, report) = Tape::lex(&bytes, &Budget::default()).unwrap();
+        assert!(report.is_empty());
+        let range = tape.section(SectionName::Entities).unwrap();
+        let items: Vec<(i16, Vec<u8>)> = Cursor::new(&tape, &bytes, range.start..range.end)
+            .map(|(c, v)| (c, v.to_vec()))
+            .collect();
+        let cursor = Cursor::new(&tape, &bytes, 0..0);
+        let value = |code: i16| {
+            items
+                .iter()
+                .find(|(c, _)| *c == code)
+                .map(|(_, v)| v.clone())
+                .unwrap()
+        };
+        assert_eq!(cursor.f64(&value(10)), Some(1.5));
+        assert_eq!(cursor.i64(&value(70)), Some(1));
+        assert_eq!(cursor.i64(&value(90)), Some(2));
+        assert_eq!(cursor.i64(&value(160)), Some(7));
+        assert_eq!(cursor.i64(&value(290)), Some(1));
+        assert_eq!(value(70).len(), 2);
+        assert_eq!(value(90).len(), 4);
+        assert_eq!(value(160).len(), 8);
+        assert_eq!(value(290).len(), 1);
+    }
+
+    #[test]
+    fn every_handle_in_simple_drawing_is_unique() {
+        let bytes = simple_drawing();
+        let (tape, _) = Tape::lex(&bytes, &Budget::default()).unwrap();
+        let handles: Vec<Vec<u8>> = Cursor::new(&tape, &bytes, 0..tape.len())
+            .filter(|(code, _)| *code == 5)
+            .map(|(_, value)| value.to_vec())
+            .collect();
+        let unique: std::collections::HashSet<&Vec<u8>> = handles.iter().collect();
+        assert!(handles.len() > 10);
+        assert_eq!(unique.len(), handles.len());
+    }
+
+    #[test]
+    fn layout_and_block_record_point_at_each_other() {
+        let bytes = simple_drawing();
+        let tables = records(&section_pairs(&bytes, SectionName::Tables));
+        let paper = tables
+            .iter()
+            .find(|r| r.contains(&(2, b"*Paper_Space".to_vec())))
+            .unwrap();
+        let objects = records(&section_pairs(&bytes, SectionName::Objects));
+        let layout = objects
+            .iter()
+            .find(|r| r[0].1 == b"LAYOUT" && r.contains(&(1, b"Layout1".to_vec())))
+            .unwrap();
+        let owner = layout.iter().rev().find(|(c, _)| *c == 330).unwrap();
+        assert_eq!(owner.1, first(paper, 5));
+        assert_eq!(first(paper, 340), first(layout, 5));
+    }
+
+    #[test]
+    fn simple_drawing_extmax_is_65_by_40() {
+        let bytes = simple_drawing();
+        let header = section_pairs(&bytes, SectionName::Header);
+        let at = header
+            .iter()
+            .position(|(c, v)| *c == 9 && v == b"$EXTMAX")
+            .unwrap();
+        assert_eq!(text(&header[at + 1].1), "65.0");
+        assert_eq!(text(&header[at + 2].1), "40.0");
+    }
+
+    #[test]
+    fn ascii_and_binary_builds_lex_to_matching_tapes() {
+        let ascii = simple_builder().build();
+        let binary = simple_builder().binary().build();
+        let (ascii_tape, _) = Tape::lex(&ascii, &Budget::default()).unwrap();
+        let (binary_tape, _) = Tape::lex(&binary, &Budget::default()).unwrap();
+        assert_eq!(ascii_tape.len(), binary_tape.len());
+        for name in [
+            SectionName::Header,
+            SectionName::Tables,
+            SectionName::Blocks,
+            SectionName::Entities,
+            SectionName::Objects,
+        ] {
+            let a = ascii_tape.section(name).map(|s| (s.start, s.end));
+            let b = binary_tape.section(name).map(|s| (s.start, s.end));
+            assert_eq!(a, b, "{name:?}");
+        }
     }
 }
