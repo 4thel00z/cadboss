@@ -20,7 +20,7 @@ Use `--out PATH` to write the JSON elsewhere.
 
 ## Criterion benches
 
-`crates/cadboss-dxf/benches/dxf.rs` has groups `lex`, `document` and `text` over `realistic_drawing(10_000)`, `realistic_drawing(100_000)` and `multi_layout(50)`.
+`crates/cadboss-dxf/benches/dxf.rs` has groups `lex`, `document` and `text` over `realistic_drawing(10_000)`, `realistic_drawing(100_000)` and `multi_layout(50)`, and `decode` over one LWPOLYLINE with 200 000 vertices.
 
 ```
 make bench

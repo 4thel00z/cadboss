@@ -12,7 +12,7 @@ use crate::codepage::{decode, Codepage};
 use crate::entity::EntityDecoder;
 use crate::header::{read_header, Header};
 use crate::layouts::read_layouts;
-use crate::record::{first, pairs_until, without_groups};
+use crate::record::Record;
 use crate::tables::{read_block_records, read_layers, BlockRecord};
 use crate::tape::{Cursor, SectionName, Tape};
 
@@ -373,9 +373,9 @@ impl DxfDocument {
             if code != 0 || value != b"IMAGEDEF" {
                 continue;
             }
-            let pairs = without_groups(pairs_until(&mut cursor, 0));
-            let handle = first(&pairs, 5).and_then(|value| cursor.handle(value));
-            let (Some(handle), Some(path)) = (handle, first(&pairs, 1)) else {
+            let record = Record::until(&mut cursor, 0);
+            let handle = record.first(5).and_then(|value| record.handle(value));
+            let (Some(handle), Some(path)) = (handle, record.first(1)) else {
                 report.note(SkipKind::Object, SkipReason::Malformed);
                 continue;
             };

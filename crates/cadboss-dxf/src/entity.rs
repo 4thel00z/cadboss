@@ -7,7 +7,7 @@ use cadboss_model::{Attribute, Entity, EntityCommon, EntityKind, Text};
 
 use crate::codepage::{decode, decode_unescaped, Codepage};
 use crate::mtext::strip_mtext;
-use crate::record::{first, pairs_until, without_groups, Pair};
+use crate::record::{Record, Records};
 use crate::tape::Cursor;
 
 const BY_LAYER: i16 = 256;
@@ -18,11 +18,6 @@ const POLYFACE_VERTEX: i64 = 64;
 const DEFAULT_SPLINE_DEGREE: u16 = 3;
 
 type LayoutOf<'t> = &'t dyn Fn(Option<u64>, bool) -> Text;
-
-struct Child<'t> {
-    name: &'t [u8],
-    pairs: Vec<Pair<'t>>,
-}
 
 /// Yields one entity per code-0 record of the cursor range, consuming the VERTEX or ATTRIB records and SEQEND that belong to it.
 /// Strings are decoded first and then cut to `Budget::max_string_bytes` on a character boundary.
@@ -71,11 +66,10 @@ impl<'t> EntityDecoder<'t> {
     }
 
     fn decode_record(&mut self, name: &'t [u8]) -> Option<Entity> {
-        let head = without_groups(pairs_until(&mut self.cursor, 0));
-        let children = self.children_of(name, &head);
+        let head = Record::until(&mut self.cursor, 0);
+        let children = self.children(name, &head);
         let mut fields = Fields {
-            cursor: &self.cursor,
-            pairs: &head,
+            record: head,
             cp: self.cp,
             max_string: usize::try_from(self.budget.max_string_bytes).unwrap_or(usize::MAX),
             report: &mut self.report,
@@ -86,7 +80,7 @@ impl<'t> EntityDecoder<'t> {
                 return None;
             }
         }
-        let Some(kind) = build(&mut fields, &children, name) else {
+        let Some(kind) = build(&mut fields, children, name) else {
             fields.report.note(SkipKind::Entity, SkipReason::Malformed);
             return None;
         };
@@ -97,38 +91,41 @@ impl<'t> EntityDecoder<'t> {
         Some(Entity { common, kind })
     }
 
-    fn children_of(&mut self, name: &[u8], head: &[Pair<'t>]) -> Vec<Child<'t>> {
-        if !self.has_children(name, head) {
-            return Vec::new();
+    /// Consumes the VERTEX or ATTRIB records and the SEQEND that belong to the record and returns them in place.
+    fn children(&mut self, name: &[u8], head: &Record<'t>) -> Records<'t> {
+        let start = self.cursor.index();
+        if self.has_children(name, head) {
+            self.skip_children();
         }
-        self.children()
+        Records::new(
+            self.cursor.tape(),
+            self.cursor.bytes(),
+            start..self.cursor.index(),
+        )
     }
 
-    fn has_children(&self, name: &[u8], head: &[Pair<'t>]) -> bool {
+    fn has_children(&self, name: &[u8], head: &Record<'t>) -> bool {
         if name == b"POLYLINE" {
             return true;
         }
         if name != b"INSERT" {
             return false;
         }
-        let announced = first(head, 66).and_then(|value| self.cursor.i64(value)) == Some(1);
+        let announced = head.first(66).and_then(|value| head.i64(value)) == Some(1);
         announced || matches!(self.cursor.peek(), Some((0, b"ATTRIB")))
     }
 
-    fn children(&mut self) -> Vec<Child<'t>> {
-        let mut children = Vec::new();
+    fn skip_children(&mut self) {
         while let Some((0, name)) = self.cursor.peek() {
             if !matches!(name, b"VERTEX" | b"ATTRIB" | b"SEQEND") {
-                break;
+                return;
             }
             self.cursor.next();
-            let pairs = without_groups(pairs_until(&mut self.cursor, 0));
+            self.cursor.skip_to_code_zero();
             if name == b"SEQEND" {
-                break;
+                return;
             }
-            children.push(Child { name, pairs });
         }
-        children
     }
 }
 
@@ -159,18 +156,16 @@ impl<'t> Iterator for EntityDecoder<'t> {
 }
 
 struct Fields<'a, 't> {
-    cursor: &'a Cursor<'t>,
-    pairs: &'a [Pair<'t>],
+    record: Record<'t>,
     cp: Codepage,
     max_string: usize,
     report: &'a mut Report,
 }
 
-impl<'a, 't> Fields<'a, 't> {
-    fn over<'b>(&'b mut self, pairs: &'b [Pair<'t>]) -> Fields<'b, 't> {
+impl<'t> Fields<'_, 't> {
+    fn over(&mut self, record: Record<'t>) -> Fields<'_, 't> {
         Fields {
-            cursor: self.cursor,
-            pairs,
+            record,
             cp: self.cp,
             max_string: self.max_string,
             report: &mut *self.report,
@@ -178,15 +173,15 @@ impl<'a, 't> Fields<'a, 't> {
     }
 
     fn raw(&self, code: i16) -> Option<&'t [u8]> {
-        first(self.pairs, code)
+        self.record.first(code)
     }
 
     fn float(&self, code: i16) -> Option<f64> {
-        self.cursor.f64(self.raw(code)?)
+        self.record.f64(self.raw(code)?)
     }
 
     fn int(&self, code: i16) -> Option<i64> {
-        self.cursor.i64(self.raw(code)?)
+        self.record.i64(self.raw(code)?)
     }
 
     fn closed(&self) -> bool {
@@ -194,7 +189,7 @@ impl<'a, 't> Fields<'a, 't> {
     }
 
     fn handle(&self, code: i16) -> Option<u64> {
-        self.cursor.handle(self.raw(code)?)
+        self.record.handle(self.raw(code)?)
     }
 
     fn point(&self, code: i16) -> Option<Point> {
@@ -206,14 +201,15 @@ impl<'a, 't> Fields<'a, 't> {
     fn points(&mut self, code: i16) -> Vec<Point> {
         let mut points: Vec<Point> = Vec::new();
         let mut skipping = false;
-        for &(candidate, value) in self.pairs {
+        let record = self.record;
+        for (candidate, value) in record.pairs() {
             let Some(offset) = candidate
                 .checked_sub(code)
                 .filter(|offset| matches!(offset, 0 | 10 | 20))
             else {
                 continue;
             };
-            match (offset, self.cursor.f64(value)) {
+            match (offset, record.f64(value)) {
                 (0, Some(x)) => {
                     skipping = false;
                     points.push(Point::new(x, 0.0, 0.0));
@@ -301,11 +297,11 @@ impl<'a, 't> Fields<'a, 't> {
     fn mtext(&mut self) -> Text {
         let mut joined: Vec<u8> = Vec::new();
         let mut cut = false;
-        let chunks = self
-            .pairs
-            .iter()
+        let record = self.record;
+        let chunks = record
+            .pairs()
             .filter(|(code, _)| *code == 3)
-            .chain(self.pairs.iter().filter(|(code, _)| *code == 1));
+            .chain(record.pairs().filter(|(code, _)| *code == 1));
         for (_, value) in chunks {
             let room = self.max_string.saturating_sub(joined.len());
             cut |= value.len() > room;
@@ -326,17 +322,12 @@ impl<'a, 't> Fields<'a, 't> {
     }
 
     fn hyperlink(&mut self) -> Option<Text> {
-        let start = self
-            .pairs
-            .iter()
-            .position(|(code, value)| *code == 1001 && *value == b"PE_URL")?;
-        let raw = self
-            .pairs
-            .iter()
-            .skip(start + 1)
+        let mut pairs = self.record.pairs();
+        pairs.find(|(code, value)| *code == 1001 && *value == b"PE_URL")?;
+        let raw = pairs
             .take_while(|(code, _)| *code != 1001)
             .find(|(code, _)| *code == 1000)
-            .map(|(_, value)| *value)?;
+            .map(|(_, value)| value)?;
         Some(self.string(raw, false))
     }
 
@@ -358,7 +349,7 @@ impl<'a, 't> Fields<'a, 't> {
 
 fn build<'t>(
     fields: &mut Fields<'_, 't>,
-    children: &[Child<'t>],
+    children: Records<'t>,
     name: &[u8],
 ) -> Option<EntityKind> {
     match name {
@@ -448,11 +439,17 @@ fn leader(fields: &mut Fields) -> EntityKind {
 }
 
 fn lwpolyline(fields: &mut Fields) -> EntityKind {
-    let mut points: Vec<Point> = Vec::new();
-    let mut bulges: Vec<f64> = Vec::new();
+    let record = fields.record;
+    let announced = fields
+        .int(90)
+        .and_then(|count| usize::try_from(count).ok())
+        .unwrap_or(0);
+    let capacity = announced.min(record.len() as usize / 2);
+    let mut points: Vec<Point> = Vec::with_capacity(capacity);
+    let mut bulges: Vec<f64> = Vec::with_capacity(capacity);
     let mut skipping = false;
-    for &(code, value) in fields.pairs {
-        match (code, fields.cursor.f64(value)) {
+    for (code, value) in record.pairs() {
+        match (code, record.f64(value)) {
             (10, Some(x)) => {
                 skipping = false;
                 points.push(Point::new(x, 0.0, 0.0));
@@ -484,11 +481,11 @@ fn lwpolyline(fields: &mut Fields) -> EntityKind {
     }
 }
 
-fn polyline<'t>(fields: &mut Fields<'_, 't>, children: &[Child<'t>]) -> EntityKind {
+fn polyline<'t>(fields: &mut Fields<'_, 't>, children: Records<'t>) -> EntityKind {
     let mut points = Vec::new();
     let mut bulges = Vec::new();
-    for child in children.iter().filter(|child| child.name == b"VERTEX") {
-        let vertex = fields.over(&child.pairs);
+    for (_, record) in children.filter(|(name, _)| *name == b"VERTEX") {
+        let vertex = fields.over(record);
         let flags = vertex.int(70).unwrap_or(0);
         if flags & POLYFACE_FACE != 0 && flags & POLYFACE_VERTEX == 0 {
             continue;
@@ -566,12 +563,12 @@ fn dimension(fields: &mut Fields) -> EntityKind {
     }
 }
 
-fn insert<'t>(fields: &mut Fields<'_, 't>, children: &[Child<'t>]) -> Option<EntityKind> {
+fn insert<'t>(fields: &mut Fields<'_, 't>, children: Records<'t>) -> Option<EntityKind> {
     let block_name = fields.text(2)?;
     let position = fields.point(10)?;
     let mut attributes = Vec::new();
-    for child in children.iter().filter(|child| child.name == b"ATTRIB") {
-        let mut attrib = fields.over(&child.pairs);
+    for (_, record) in children.filter(|(name, _)| *name == b"ATTRIB") {
+        let mut attrib = fields.over(record);
         let Some(tag) = attrib.text(2) else {
             attrib.report.note(SkipKind::Entity, SkipReason::Malformed);
             continue;
@@ -607,11 +604,11 @@ fn image(fields: &Fields) -> Option<EntityKind> {
 }
 
 fn viewport(fields: &Fields) -> Option<EntityKind> {
-    let frozen_layers = fields
-        .pairs
-        .iter()
+    let record = fields.record;
+    let frozen_layers = record
+        .pairs()
         .filter(|(code, _)| *code == 331)
-        .filter_map(|(_, value)| fields.cursor.handle(value))
+        .filter_map(|(_, value)| record.handle(value))
         .map(|handle| Text::from(format!("{handle:X}")))
         .collect();
     Some(EntityKind::Viewport {

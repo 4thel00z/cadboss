@@ -6,7 +6,7 @@ use cadboss_core::{Budget, Report, SkipKind, SkipReason};
 use cadboss_model::{Layout, LayoutKind, Text};
 
 use crate::codepage::{decode, Codepage};
-use crate::record::{first, last, pairs_until, without_groups};
+use crate::record::Record;
 use crate::tables::BlockRecord;
 use crate::tape::{Cursor, SectionName, Tape};
 
@@ -63,16 +63,18 @@ pub fn read_layouts(
             if code != 0 || value != b"LAYOUT" {
                 continue;
             }
-            let pairs = without_groups(pairs_until(&mut cursor, 0));
-            let record = last(&pairs, 330)
-                .and_then(|value| cursor.handle(value))
+            let pairs = Record::until(&mut cursor, 0);
+            let record = pairs
+                .last(330)
+                .and_then(|value| pairs.handle(value))
                 .and_then(|handle| by_handle.get(&handle));
-            let (Some(name), Some(record)) = (last(&pairs, 1), record) else {
+            let (Some(name), Some(record)) = (pairs.last(1), record) else {
                 report.note(SkipKind::Object, SkipReason::Malformed);
                 continue;
             };
-            let tab = first(&pairs, 71)
-                .and_then(|value| cursor.i64(value))
+            let tab = pairs
+                .first(71)
+                .and_then(|value| pairs.i64(value))
                 .unwrap_or(0);
             let layout = layout(decode(cp, name, report), record.name.clone());
             if layout.kind == LayoutKind::Model {

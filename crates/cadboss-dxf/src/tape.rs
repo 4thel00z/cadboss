@@ -122,6 +122,28 @@ impl Tape {
         self.sections.iter().find(|section| section.name == name)
     }
 
+    /// Decodes a numeric value: fixed-width little-endian bytes when the tape is binary, text otherwise.
+    pub(crate) fn f64(&self, value: &[u8]) -> Option<f64> {
+        if self.binary {
+            return Some(f64::from_le_bytes(value.try_into().ok()?));
+        }
+        std::str::from_utf8(value).ok()?.trim().parse().ok()
+    }
+
+    /// Decodes an integer value by width (1, 2, 4 or 8 bytes) when the tape is binary, text otherwise.
+    pub(crate) fn i64(&self, value: &[u8]) -> Option<i64> {
+        if self.binary {
+            return match *value {
+                [byte] => Some(i64::from(byte)),
+                [a, b] => Some(i64::from(i16::from_le_bytes([a, b]))),
+                [a, b, c, d] => Some(i64::from(i32::from_le_bytes([a, b, c, d]))),
+                [a, b, c, d, e, f, g, h] => Some(i64::from_le_bytes([a, b, c, d, e, f, g, h])),
+                _ => None,
+            };
+        }
+        std::str::from_utf8(value).ok()?.trim().parse().ok()
+    }
+
     pub fn pairs(&self, range: Range<u32>) -> impl Iterator<Item = (u32, i16)> + '_ {
         range.filter_map(|index| {
             self.tokens
@@ -152,6 +174,14 @@ impl<'t> Cursor<'t> {
         self.index
     }
 
+    pub(crate) fn tape(&self) -> &'t Tape {
+        self.tape
+    }
+
+    pub(crate) fn bytes(&self) -> &'t [u8] {
+        self.bytes
+    }
+
     pub fn peek_code(&self) -> Option<i16> {
         if self.index >= self.end {
             return None;
@@ -176,36 +206,32 @@ impl<'t> Cursor<'t> {
     }
 
     pub fn skip_to_code_zero(&mut self) {
-        while self.peek_code().is_some_and(|code| code != 0) {
+        self.skip_to_code(0);
+    }
+
+    pub(crate) fn skip_to_code(&mut self, code: i16) {
+        while self.peek_code().is_some_and(|candidate| candidate != code) {
             self.index += 1;
         }
     }
 
     /// Decodes a numeric value: fixed-width little-endian bytes when the tape is binary, text otherwise.
     pub fn f64(&self, value: &[u8]) -> Option<f64> {
-        if self.tape.binary {
-            return Some(f64::from_le_bytes(value.try_into().ok()?));
-        }
-        std::str::from_utf8(value).ok()?.trim().parse().ok()
+        self.tape.f64(value)
     }
 
     /// Decodes an integer value by width (1, 2, 4 or 8 bytes) when the tape is binary, text otherwise.
     pub fn i64(&self, value: &[u8]) -> Option<i64> {
-        if self.tape.binary {
-            return match *value {
-                [byte] => Some(i64::from(byte)),
-                [a, b] => Some(i64::from(i16::from_le_bytes([a, b]))),
-                [a, b, c, d] => Some(i64::from(i32::from_le_bytes([a, b, c, d]))),
-                [a, b, c, d, e, f, g, h] => Some(i64::from_le_bytes([a, b, c, d, e, f, g, h])),
-                _ => None,
-            };
-        }
-        std::str::from_utf8(value).ok()?.trim().parse().ok()
+        self.tape.i64(value)
     }
 
     pub fn handle(&self, value: &[u8]) -> Option<u64> {
-        u64::from_str_radix(std::str::from_utf8(value).ok()?.trim(), 16).ok()
+        handle(value)
     }
+}
+
+pub(crate) fn handle(value: &[u8]) -> Option<u64> {
+    u64::from_str_radix(std::str::from_utf8(value).ok()?.trim(), 16).ok()
 }
 
 impl<'t> Iterator for Cursor<'t> {

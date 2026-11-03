@@ -1,4 +1,5 @@
 use std::io::Write;
+use std::ops::Range;
 use std::path::PathBuf;
 
 use cadboss_core::Report;
@@ -7,28 +8,16 @@ use clap::Args;
 
 use crate::failure::Failure;
 
-type Pair<'t> = (i16, &'t [u8]);
-
 #[derive(Args)]
 pub struct ObjArgs {
     pub file: PathBuf,
     pub handle: String,
 }
 
-fn records<'t>(cursor: Cursor<'t>) -> Vec<Vec<Pair<'t>>> {
-    let mut records: Vec<Vec<Pair<'t>>> = Vec::new();
-    for pair in cursor {
-        match records.last_mut() {
-            Some(record) if pair.0 != 0 => record.push(pair),
-            _ => records.push(vec![pair]),
-        }
-    }
-    records
-}
-
-fn find(doc: &DxfDocument, handle: u64) -> Option<Vec<Pair<'_>>> {
+/// Token range from the code-0 pair of the first record whose first handle pair is `handle` to the end of its section.
+fn locate(doc: &DxfDocument, handle: u64) -> Option<Range<u32>> {
     let tape = doc.tape();
-    let bytes = doc.bytes();
+    let reader = Cursor::new(tape, doc.bytes(), 0..0);
     [
         SectionName::Tables,
         SectionName::Blocks,
@@ -37,18 +26,25 @@ fn find(doc: &DxfDocument, handle: u64) -> Option<Vec<Pair<'_>>> {
     ]
     .into_iter()
     .filter_map(|name| tape.section(name))
-    .flat_map(|section| {
-        let cursor = Cursor::new(tape, bytes, section.start..section.end);
-        let reader = Cursor::new(tape, bytes, section.start..section.end);
-        records(cursor).into_iter().filter(move |record| {
-            record
-                .iter()
-                .find(|(code, _)| *code == 5)
-                .and_then(|(_, value)| reader.handle(value))
-                == Some(handle)
-        })
+    .find_map(|section| {
+        let mut start = section.start;
+        let mut checked = false;
+        for (index, code) in tape.pairs(section.start..section.end) {
+            if code == 0 {
+                start = index;
+                checked = false;
+                continue;
+            }
+            if code != 5 || checked {
+                continue;
+            }
+            checked = true;
+            if reader.handle(tape.value(index, doc.bytes())) == Some(handle) {
+                return Some(start..section.end);
+            }
+        }
+        None
     })
-    .next()
 }
 
 fn display(cursor: &Cursor<'_>, binary: bool, code: i16, value: &[u8]) -> String {
@@ -64,11 +60,16 @@ pub fn run(args: &ObjArgs, doc: &DxfDocument, out: &mut dyn Write) -> Result<Rep
     let digits = args.handle.trim_start_matches("0x");
     let handle = u64::from_str_radix(digits, 16)
         .map_err(|_| Failure::usage(format!("invalid handle {}: expected hex", args.handle)))?;
-    let record = find(doc, handle).ok_or_else(|| Failure::input("handle not found"))?;
-    let cursor = Cursor::new(doc.tape(), doc.bytes(), 0..0);
+    let range = locate(doc, handle).ok_or_else(|| Failure::input("handle not found"))?;
+    let mut record = Cursor::new(doc.tape(), doc.bytes(), range);
+    let reader = Cursor::new(doc.tape(), doc.bytes(), 0..0);
     let binary = doc.tape().is_binary();
-    for (code, value) in record {
-        writeln!(out, "{code}\t{}", display(&cursor, binary, code, value))?;
+    let head = record.next();
+    for (code, value) in head
+        .into_iter()
+        .chain(record.take_while(|(code, _)| *code != 0))
+    {
+        writeln!(out, "{code}\t{}", display(&reader, binary, code, value))?;
     }
     Ok(doc.report().clone())
 }

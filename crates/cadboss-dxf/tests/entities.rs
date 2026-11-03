@@ -609,3 +609,56 @@ fn foreign_xdata_without_a_url_leaves_the_hyperlink_empty() {
     let (entities, _) = decode_all(&bytes).unwrap();
     assert_eq!(entities[0].common.hyperlink, None);
 }
+
+#[test]
+fn lwpolyline_with_200_000_vertices_fills_exactly_sized_point_lists() {
+    let corners: Vec<(f64, f64, f64)> = (0..200_000)
+        .map(|index| (f64::from(index), f64::from(index % 7), 0.0))
+        .collect();
+    let bytes = DxfBuilder::new().lwpolyline(&corners, false).build();
+    let (entities, report) = decode_all(&bytes).unwrap();
+    assert!(report.is_empty());
+    let (points, bulges) =
+        variant!(entities[0], EntityKind::Polyline { points, bulges, .. } => (points, bulges));
+    assert_eq!(points.len(), 200_000);
+    assert_eq!(points.capacity(), 200_000);
+    assert_eq!(bulges.capacity(), 200_000);
+    assert_eq!(points[199_999], Point::xy(199_999.0, 2.0));
+}
+
+#[test]
+fn lwpolyline_vertex_count_cannot_reserve_past_the_record() {
+    let bytes = DxfBuilder::new()
+        .raw(0, "LWPOLYLINE")
+        .raw(90, "2000000000")
+        .raw(10, "0.0")
+        .raw(20, "0.0")
+        .raw(10, "1.0")
+        .raw(20, "1.0")
+        .build();
+    let (entities, _) = decode_all(&bytes).unwrap();
+    let points = variant!(entities[0], EntityKind::Polyline { points, .. } => points);
+    assert_eq!(points.len(), 2);
+    assert!(points.capacity() <= 3);
+}
+
+#[test]
+fn polyline_vertices_inside_a_reactor_group_are_read_in_place() {
+    let bytes = DxfBuilder::new()
+        .raw(0, "POLYLINE")
+        .raw(102, "{ACAD_REACTORS")
+        .raw(330, "AB")
+        .raw(102, "}")
+        .raw(0, "VERTEX")
+        .raw(102, "{ACAD_REACTORS")
+        .raw(10, "9.0")
+        .raw(102, "}")
+        .raw(10, "1.0")
+        .raw(20, "2.0")
+        .raw(0, "SEQEND")
+        .build();
+    let (entities, report) = decode_all(&bytes).unwrap();
+    assert!(report.is_empty());
+    let points = variant!(entities[0], EntityKind::Polyline { points, .. } => points);
+    assert_eq!(points, &vec![Point::xy(1.0, 2.0)]);
+}

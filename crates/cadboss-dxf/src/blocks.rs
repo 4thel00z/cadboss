@@ -6,7 +6,7 @@ use cadboss_core::{Point, Report, SkipKind, SkipReason};
 use cadboss_model::Block;
 
 use crate::codepage::{decode, Codepage};
-use crate::record::{first, pairs_until, without_groups};
+use crate::record::Record;
 use crate::tape::{Cursor, SectionName, Tape};
 
 const XREF: i64 = 4;
@@ -28,7 +28,7 @@ pub fn read_blocks(tape: &Tape, bytes: &[u8], cp: Codepage, report: &mut Report)
         if code != 0 || value != b"BLOCK" {
             continue;
         }
-        let head = without_groups(pairs_until(&mut cursor, 0));
+        let head = Record::until(&mut cursor, 0);
         let start = cursor.index();
         let end = loop {
             match cursor.peek() {
@@ -39,7 +39,7 @@ pub fn read_blocks(tape: &Tape, bytes: &[u8], cp: Codepage, report: &mut Report)
                 Some((0, b"ENDBLK")) => {
                     let end = cursor.index();
                     cursor.next();
-                    pairs_until(&mut cursor, 0);
+                    cursor.skip_to_code_zero();
                     break end;
                 }
                 Some(_) => {
@@ -47,15 +47,17 @@ pub fn read_blocks(tape: &Tape, bytes: &[u8], cp: Codepage, report: &mut Report)
                 }
             }
         };
-        let Some(name) = first(&head, 2) else {
+        let Some(name) = head.first(2) else {
             report.note(SkipKind::Table, SkipReason::Malformed);
             continue;
         };
-        let number = |code: i16| first(&head, code).and_then(|value| cursor.f64(value));
-        let flags = first(&head, 70)
-            .and_then(|value| cursor.i64(value))
+        let number = |code: i16| head.first(code).and_then(|value| head.f64(value));
+        let flags = head
+            .first(70)
+            .and_then(|value| head.i64(value))
             .unwrap_or(0);
-        let xref_path = first(&head, 1)
+        let xref_path = head
+            .first(1)
             .filter(|path| flags & XREF != 0 && !path.is_empty())
             .map(|path| decode(cp, path, report));
         let name = decode(cp, name, report);
@@ -71,8 +73,9 @@ pub fn read_blocks(tape: &Tape, bytes: &[u8], cp: Codepage, report: &mut Report)
                 xref_path,
                 entity_count: 0,
             },
-            handle: first(&head, 5)
-                .and_then(|value| cursor.handle(value))
+            handle: head
+                .first(5)
+                .and_then(|value| head.handle(value))
                 .unwrap_or(0),
             entities: start..end,
         });
