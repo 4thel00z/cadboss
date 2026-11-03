@@ -80,6 +80,12 @@ impl<'t> EntityDecoder<'t> {
             max_string: usize::try_from(self.budget.max_string_bytes).unwrap_or(usize::MAX),
             report: &mut self.report,
         };
+        if let Some(filter) = &self.layout_filter {
+            let layout = (self.layout_of)(fields.handle(330), fields.int(67) == Some(1));
+            if layout != *filter {
+                return None;
+            }
+        }
         let Some(kind) = build(&mut fields, &children, name) else {
             fields.report.note(SkipKind::Entity, SkipReason::Malformed);
             return None;
@@ -145,13 +151,6 @@ impl<'t> Iterator for EntityDecoder<'t> {
             let Some(entity) = self.decode_record(name) else {
                 continue;
             };
-            if self
-                .layout_filter
-                .as_ref()
-                .is_some_and(|filter| *filter != entity.common.layout)
-            {
-                continue;
-            }
             self.decoded += 1;
             return Some(entity);
         }

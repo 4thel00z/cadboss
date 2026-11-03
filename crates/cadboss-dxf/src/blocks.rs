@@ -30,19 +30,25 @@ pub fn read_blocks(tape: &Tape, bytes: &[u8], cp: Codepage, report: &mut Report)
         }
         let head = without_groups(pairs_until(&mut cursor, 0));
         let start = cursor.index();
-        while cursor
-            .peek()
-            .is_some_and(|(code, value)| code != 0 || value != b"ENDBLK")
-        {
-            cursor.next();
-        }
-        let end = cursor.index();
-        if cursor.next().is_none() {
-            report.note(SkipKind::Section, SkipReason::Truncated);
-        }
-        pairs_until(&mut cursor, 0);
+        let end = loop {
+            match cursor.peek() {
+                None | Some((0, b"BLOCK")) => {
+                    report.note(SkipKind::Section, SkipReason::Truncated);
+                    break cursor.index();
+                }
+                Some((0, b"ENDBLK")) => {
+                    let end = cursor.index();
+                    cursor.next();
+                    pairs_until(&mut cursor, 0);
+                    break end;
+                }
+                Some(_) => {
+                    cursor.next();
+                }
+            }
+        };
         let Some(name) = first(&head, 2) else {
-            report.note(SkipKind::Section, SkipReason::Malformed);
+            report.note(SkipKind::Table, SkipReason::Malformed);
             continue;
         };
         let number = |code: i16| first(&head, code).and_then(|value| cursor.f64(value));

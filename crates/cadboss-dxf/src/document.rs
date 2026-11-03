@@ -70,15 +70,17 @@ fn constant(text: Text) -> LayoutOf {
     Box::new(move |_, _| text.clone())
 }
 
-fn layout_resolver(block_records: &[BlockRecord], layouts: &[Layout]) -> LayoutOf {
+fn layout_resolver(
+    block_records: &[BlockRecord],
+    layouts: &[Layout],
+    layout_names: &HashMap<String, Text>,
+) -> LayoutOf {
     let owners: HashMap<u64, Text> = block_records
         .iter()
         .filter(|record| record.handle != 0)
         .filter_map(|record| {
-            let layout = layouts
-                .iter()
-                .find(|layout| layout.block_name == record.name)?;
-            Some((record.handle, layout.name.clone()))
+            let name = layout_names.get(&record.name.as_str()?.to_ascii_lowercase())?;
+            Some((record.handle, name.clone()))
         })
         .collect();
     let model = layouts
@@ -87,16 +89,26 @@ fn layout_resolver(block_records: &[BlockRecord], layouts: &[Layout]) -> LayoutO
         .map_or_else(|| Text::from("Model"), |layout| layout.name.clone());
     let paper = layouts
         .iter()
-        .find(|layout| layout.kind == LayoutKind::Paper)
+        .find(|layout| {
+            layout
+                .block_name
+                .as_str()
+                .is_some_and(|name| name.eq_ignore_ascii_case("*Paper_Space"))
+        })
+        .or_else(|| {
+            layouts
+                .iter()
+                .find(|layout| layout.kind == LayoutKind::Paper)
+        })
         .map_or_else(|| Text::from("Layout1"), |layout| layout.name.clone());
     Box::new(move |owner, paper_flag| {
         if let Some(name) = owner.and_then(|handle| owners.get(&handle)) {
             return name.clone();
         }
-        match paper_flag {
-            true => paper.clone(),
-            false => model.clone(),
+        if paper_flag {
+            return paper.clone();
         }
+        model.clone()
     })
 }
 
@@ -129,17 +141,28 @@ impl DxfDocument {
                 .entry(name.to_ascii_lowercase())
                 .or_insert(index);
         }
+        let mut layout_names = HashMap::new();
+        for layout in &layouts {
+            let Some(block) = layout.block_name.as_str() else {
+                continue;
+            };
+            layout_names
+                .entry(block.to_ascii_lowercase())
+                .or_insert_with(|| layout.name.clone());
+        }
         let block_layouts = blocks
             .iter()
             .map(|def| {
-                let owner = layouts
-                    .iter()
-                    .find(|layout| layout.block_name == def.block.name);
-                constant(owner.map_or_else(|| def.block.name.clone(), |layout| layout.name.clone()))
+                let owner = def
+                    .block
+                    .name
+                    .as_str()
+                    .and_then(|name| layout_names.get(&name.to_ascii_lowercase()));
+                constant(owner.map_or_else(|| def.block.name.clone(), Text::clone))
             })
             .collect();
         Ok(DxfDocument {
-            layout_of: layout_resolver(&block_records, &layouts),
+            layout_of: layout_resolver(&block_records, &layouts, &layout_names),
             source,
             tape,
             header,
@@ -255,8 +278,8 @@ impl DxfDocument {
         Some(self.decoder(def.entities.clone(), layout_of))
     }
 
-    /// Entities of `layout`: model space and the first paper layout come from the ENTITIES section filtered by owner,
-    /// other paper layouts from their own block. An unknown layout yields nothing.
+    /// Entities of `layout`: a paper layout whose block has a non-empty body reads that body; otherwise the ENTITIES section filtered by owner.
+    /// An unknown layout yields nothing.
     pub fn entities(&self, layout: &str) -> EntityDecoder<'_> {
         let Some(found) = self
             .layouts
@@ -265,10 +288,10 @@ impl DxfDocument {
         else {
             return self.decoder(0..0, &self.layout_of);
         };
-        let own_block = self
-            .blocks
-            .iter()
-            .position(|def| def.block.name == found.block_name)
+        let own_block = found
+            .block_name
+            .as_str()
+            .and_then(|name| self.block_index(name))
             .filter(|index| {
                 found.kind == LayoutKind::Paper
                     && self
@@ -292,13 +315,23 @@ impl DxfDocument {
         self.block_decoder(self.block_index(block)?)
     }
 
+    fn layout_block(&self, layout: &str) -> Option<usize> {
+        let found = self
+            .layouts
+            .iter()
+            .find(|candidate| candidate.name.as_str() == Some(layout))?;
+        self.block_index(found.block_name.as_str()?)
+    }
+
     pub fn walk(&self, layout: &str, visitor: &mut dyn FnMut(&Entity, &Transform, u32)) -> Report {
         let mut walker = Walker {
             document: self,
             visitor,
             report: Report::default(),
-            path: Vec::new(),
+            path: self.layout_block(layout).into_iter().collect(),
             nesting_noted: false,
+            visited: 0,
+            stopped: false,
         };
         walker.run(self.entities(layout), &Transform::identity(), 0);
         walker.report
@@ -332,11 +365,21 @@ struct Walker<'d, 'v> {
     report: Report,
     path: Vec<usize>,
     nesting_noted: bool,
+    visited: u64,
+    stopped: bool,
 }
 
 impl<'d> Walker<'d, '_> {
     fn run(&mut self, mut decoder: EntityDecoder<'d>, transform: &Transform, depth: u32) {
         for entity in decoder.by_ref() {
+            if !self.stopped && self.visited >= self.document.budget.max_entities {
+                self.report.note(SkipKind::Entity, SkipReason::EntityLimit);
+                self.stopped = true;
+            }
+            if self.stopped {
+                break;
+            }
+            self.visited += 1;
             (self.visitor)(&entity, transform, depth);
             self.expand(&entity, transform, depth);
         }
@@ -354,6 +397,9 @@ impl<'d> Walker<'d, '_> {
         else {
             return;
         };
+        if self.stopped {
+            return;
+        }
         let Some(index) = block_name
             .as_str()
             .and_then(|name| self.document.block_index(name))

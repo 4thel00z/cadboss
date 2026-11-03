@@ -1,5 +1,27 @@
-use cadboss_core::{Error, Point, SkipKind, SkipReason, Skipped};
+use cadboss_core::{Error, Point, Report, SkipKind, SkipReason, Skipped};
 use cadboss_dxf::{DxfDocument, Options};
+
+fn file(sections: &[(&str, &[(i16, &str)])]) -> Vec<u8> {
+    let mut text = String::new();
+    for (name, pairs) in sections {
+        text.push_str(&format!("0\nSECTION\n2\n{name}\n"));
+        for (code, value) in *pairs {
+            text.push_str(&format!("{code}\n{value}\n"));
+        }
+        text.push_str("0\nENDSEC\n");
+    }
+    text.push_str("0\nEOF\n");
+    text.into_bytes()
+}
+
+fn noted(report: &Report, kind: SkipKind, reason: SkipReason) -> u64 {
+    report
+        .skipped
+        .iter()
+        .filter(|entry| entry.kind == kind && entry.reason == reason)
+        .map(|entry| entry.count)
+        .sum()
+}
 use cadboss_model::{Entity, EntityKind, LayoutKind, Text};
 use cadboss_testkit::dxf::{multi_layout, nested_inserts, simple_drawing, DxfBuilder};
 
@@ -192,11 +214,11 @@ fn load_and_open_produce_equal_layouts() -> Result<(), Error> {
     let path = std::env::temp_dir().join(format!("cadboss-document-{}.dxf", std::process::id()));
     std::fs::write(&path, &bytes)?;
     let loaded = DxfDocument::load(bytes)?;
-    let opened = DxfDocument::open(&path);
-    let read = DxfDocument::read(&path);
+    let opened = DxfDocument::open(&path)?;
+    let read = DxfDocument::read(&path)?;
     std::fs::remove_file(&path)?;
-    assert_eq!(opened?.layouts(), loaded.layouts());
-    assert_eq!(read?.layouts(), loaded.layouts());
+    assert_eq!(opened.layouts(), loaded.layouts());
+    assert_eq!(read.layouts(), loaded.layouts());
     Ok(())
 }
 
@@ -244,5 +266,215 @@ fn a_document_without_layout_objects_synthesizes_model_and_layout1() -> Result<(
         .map(|layout| &layout.name)
         .collect();
     assert_eq!(names(layouts), ["Model", "Layout1"]);
+    Ok(())
+}
+
+#[test]
+fn walk_stops_at_the_entity_budget_on_doubling_inserts() -> Result<(), Error> {
+    let mut builder = DxfBuilder::new();
+    for level in 0..=20 {
+        builder = builder.block(&format!("B{level}"), (0.0, 0.0));
+        if level < 20 {
+            let next = format!("B{}", level + 1);
+            builder = builder.insert(&next, (0.0, 0.0)).insert(&next, (0.0, 0.0));
+        }
+        builder = builder.line((0.0, 0.0), (1.0, 1.0)).end();
+    }
+    let bytes = builder.insert("B0", (0.0, 0.0)).build();
+    let mut options = Options::default();
+    options.budget.max_entities = 1000;
+    let document = DxfDocument::load_with_options(bytes, &options)?;
+    let mut visits = 0;
+    let report = document.walk("Model", &mut |_, _, _| visits += 1);
+    assert!(visits <= 1000);
+    assert_eq!(noted(&report, SkipKind::Entity, SkipReason::EntityLimit), 1);
+    Ok(())
+}
+
+#[test]
+fn entities_only_file_still_has_a_model_layout() -> Result<(), Error> {
+    let bytes = file(&[(
+        "ENTITIES",
+        &[
+            (0, "LINE"),
+            (8, "0"),
+            (10, "0"),
+            (20, "0"),
+            (11, "1"),
+            (21, "1"),
+        ],
+    )]);
+    let document = DxfDocument::load(bytes)?;
+    let layouts: Vec<&Text> = document
+        .layouts()
+        .iter()
+        .map(|layout| &layout.name)
+        .collect();
+    assert_eq!(names(layouts), ["Model"]);
+    assert_eq!(document.entities("Model").count(), 1);
+    Ok(())
+}
+
+#[test]
+fn filtered_entities_add_no_notes() -> Result<(), Error> {
+    let bytes = file(&[
+        (
+            "TABLES",
+            &[
+                (0, "TABLE"),
+                (2, "BLOCK_RECORD"),
+                (0, "BLOCK_RECORD"),
+                (5, "A"),
+                (2, "*Model_Space"),
+                (0, "BLOCK_RECORD"),
+                (5, "B"),
+                (2, "*Paper_Space"),
+                (0, "ENDTAB"),
+            ],
+        ),
+        (
+            "ENTITIES",
+            &[(0, "WIPEOUT"), (5, "1F"), (330, "A"), (8, "0")],
+        ),
+    ]);
+    let document = DxfDocument::load(bytes)?;
+    let mut paper = document.entities("Layout1");
+    assert_eq!(paper.by_ref().count(), 0);
+    assert!(paper.report().is_empty());
+    let mut model = document.entities("Model");
+    assert_eq!(model.by_ref().count(), 1);
+    assert_eq!(
+        noted(model.report(), SkipKind::Entity, SkipReason::Unknown),
+        1
+    );
+    Ok(())
+}
+
+#[test]
+fn a_block_without_endblk_is_truncated_and_reported() -> Result<(), Error> {
+    let bytes = file(&[(
+        "BLOCKS",
+        &[
+            (0, "BLOCK"),
+            (2, "A"),
+            (0, "LINE"),
+            (8, "0"),
+            (10, "0"),
+            (20, "0"),
+            (11, "1"),
+            (21, "1"),
+            (0, "BLOCK"),
+            (2, "B"),
+            (0, "ENDBLK"),
+        ],
+    )]);
+    let document = DxfDocument::load(bytes)?;
+    assert_eq!(document.blocks().count(), 2);
+    assert_eq!(document.block_entities("A").ok_or(Error::Empty)?.count(), 1);
+    assert_eq!(
+        noted(document.report(), SkipKind::Section, SkipReason::Truncated),
+        1
+    );
+    Ok(())
+}
+
+#[test]
+fn a_nameless_block_is_a_malformed_table_entry() -> Result<(), Error> {
+    let bytes = file(&[("BLOCKS", &[(0, "BLOCK"), (0, "ENDBLK")])]);
+    let document = DxfDocument::load(bytes)?;
+    assert_eq!(document.blocks().count(), 0);
+    assert_eq!(
+        noted(document.report(), SkipKind::Table, SkipReason::Malformed),
+        1
+    );
+    Ok(())
+}
+
+#[test]
+fn a_layout_with_an_unresolved_block_record_is_skipped() -> Result<(), Error> {
+    let bytes = file(&[(
+        "OBJECTS",
+        &[(0, "LAYOUT"), (1, "X"), (71, "1"), (330, "FFF")],
+    )]);
+    let document = DxfDocument::load(bytes)?;
+    let layouts: Vec<&Text> = document
+        .layouts()
+        .iter()
+        .map(|layout| &layout.name)
+        .collect();
+    assert_eq!(names(layouts), ["Model"]);
+    assert_eq!(
+        noted(document.report(), SkipKind::Object, SkipReason::Malformed),
+        1
+    );
+    Ok(())
+}
+
+#[test]
+fn a_file_without_an_entities_section_has_no_entities() -> Result<(), Error> {
+    let document = DxfDocument::load(file(&[("HEADER", &[(9, "$ACADVER"), (1, "AC1027")])]))?;
+    assert_eq!(document.entities("Model").count(), 0);
+    Ok(())
+}
+
+#[test]
+fn walk_applies_base_point_and_rotation_together() -> Result<(), Error> {
+    let bytes = DxfBuilder::new()
+        .block("A", (5.0, 5.0))
+        .line((5.0, 5.0), (6.0, 5.0))
+        .end()
+        .insert_transformed("A", (10.0, 10.0), (1.0, 1.0, 1.0), 90.0)
+        .build();
+    let document = DxfDocument::load(bytes)?;
+    let mut ends = Vec::new();
+    document.walk("Model", &mut |entity, transform, _| {
+        if let EntityKind::Line { end, .. } = &entity.kind {
+            ends.push(transform.apply(*end));
+        }
+    });
+    assert_eq!(ends.len(), 1);
+    assert!(close(ends[0].x, 10.0) && close(ends[0].y, 11.0));
+    Ok(())
+}
+
+#[test]
+fn sibling_inserts_at_the_nesting_limit_note_once() -> Result<(), Error> {
+    let bytes = DxfBuilder::new()
+        .block("B", (0.0, 0.0))
+        .line((0.0, 0.0), (1.0, 1.0))
+        .end()
+        .block("A", (0.0, 0.0))
+        .insert("B", (0.0, 0.0))
+        .insert("B", (1.0, 0.0))
+        .end()
+        .insert("A", (0.0, 0.0))
+        .build();
+    let mut options = Options::default();
+    options.budget.max_nesting = 2;
+    let document = DxfDocument::load_with_options(bytes, &options)?;
+    let report = document.walk("Model", &mut |_, _, _| {});
+    assert_eq!(
+        noted(&report, SkipKind::Entity, SkipReason::NestingLimit),
+        1
+    );
+    Ok(())
+}
+
+#[test]
+fn walk_detects_a_two_block_cycle() -> Result<(), Error> {
+    let bytes = DxfBuilder::new()
+        .block("A", (0.0, 0.0))
+        .insert("B", (0.0, 0.0))
+        .end()
+        .block("B", (0.0, 0.0))
+        .insert("A", (0.0, 0.0))
+        .end()
+        .insert("A", (0.0, 0.0))
+        .build();
+    let document = DxfDocument::load(bytes)?;
+    let mut visited = 0;
+    let report = document.walk("Model", &mut |_, _, _| visited += 1);
+    assert_eq!(visited, 3);
+    assert_eq!(noted(&report, SkipKind::Entity, SkipReason::Malformed), 1);
     Ok(())
 }

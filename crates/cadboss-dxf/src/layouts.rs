@@ -17,11 +17,13 @@ fn is_named(name: &Text, expected: &str) -> bool {
 }
 
 fn layout(name: Text, block_name: Text) -> Layout {
+    let model = is_named(&block_name, MODEL_SPACE);
     Layout {
         name,
-        kind: match is_named(&block_name, MODEL_SPACE) {
-            true => LayoutKind::Model,
-            false => LayoutKind::Paper,
+        kind: if model {
+            LayoutKind::Model
+        } else {
+            LayoutKind::Paper
         },
         block_name,
         extents: None,
@@ -29,19 +31,15 @@ fn layout(name: Text, block_name: Text) -> Layout {
     }
 }
 
-fn synthesized(block_records: &[BlockRecord]) -> Vec<Layout> {
-    [(MODEL_SPACE, "Model"), (PAPER_SPACE, "Layout1")]
-        .into_iter()
-        .filter_map(|(block, name)| {
-            let record = block_records
-                .iter()
-                .find(|record| is_named(&record.name, block))?;
-            Some(layout(Text::from(name), record.name.clone()))
-        })
-        .collect()
+fn space_block(block_records: &[BlockRecord], space: &str) -> Option<Text> {
+    block_records
+        .iter()
+        .find(|record| is_named(&record.name, space))
+        .map(|record| record.name.clone())
 }
 
-/// Reads LAYOUT objects sorted by tab order; without any, derives `Model` and `Layout1` from the space block records.
+/// Reads LAYOUT objects sorted by tab order and capped at `max_layouts`.
+/// A `Model` layout is always present; `Layout1` is synthesized when no paper layout exists but a paper space block record does.
 pub fn read_layouts(
     tape: &Tape,
     bytes: &[u8],
@@ -50,37 +48,59 @@ pub fn read_layouts(
     budget: &Budget,
     report: &mut Report,
 ) -> Vec<Layout> {
-    let Some(section) = tape.section(SectionName::Objects) else {
-        return synthesized(block_records);
-    };
-    let mut cursor = Cursor::new(tape, bytes, section.start..section.end);
     let mut found = Vec::new();
-    let mut seen = 0u32;
-    while let Some((code, value)) = cursor.next() {
-        if code != 0 || value != b"LAYOUT" {
-            continue;
+    if let Some(section) = tape.section(SectionName::Objects) {
+        let mut cursor = Cursor::new(tape, bytes, section.start..section.end);
+        while let Some((code, value)) = cursor.next() {
+            if code != 0 || value != b"LAYOUT" {
+                continue;
+            }
+            let pairs = without_groups(pairs_until(&mut cursor, 0));
+            let record = last(&pairs, 330)
+                .and_then(|value| cursor.handle(value))
+                .and_then(|handle| block_records.iter().find(|record| record.handle == handle));
+            let (Some(name), Some(record)) = (last(&pairs, 1), record) else {
+                report.note(SkipKind::Object, SkipReason::Malformed);
+                continue;
+            };
+            let tab = first(&pairs, 71)
+                .and_then(|value| cursor.i64(value))
+                .unwrap_or(0);
+            found.push((tab, layout(decode(cp, name, report), record.name.clone())));
         }
-        seen += 1;
-        let pairs = without_groups(pairs_until(&mut cursor, 0));
-        if found.len() >= budget.max_layouts as usize {
-            report.note(SkipKind::Object, SkipReason::EntityLimit);
-            break;
-        }
-        let record = last(&pairs, 330)
-            .and_then(|value| cursor.handle(value))
-            .and_then(|handle| block_records.iter().find(|record| record.handle == handle));
-        let (Some(name), Some(record)) = (last(&pairs, 1), record) else {
-            report.note(SkipKind::Object, SkipReason::Malformed);
-            continue;
-        };
-        let tab = first(&pairs, 71)
-            .and_then(|value| cursor.i64(value))
-            .unwrap_or(0);
-        found.push((tab, layout(decode(cp, name, report), record.name.clone())));
-    }
-    if seen == 0 {
-        return synthesized(block_records);
     }
     found.sort_by_key(|(tab, _)| *tab);
-    found.into_iter().map(|(_, layout)| layout).collect()
+    let mut layouts: Vec<Layout> = found.into_iter().map(|(_, layout)| layout).collect();
+    let max = budget.max_layouts as usize;
+    if layouts.len() > max {
+        report.note(SkipKind::Object, SkipReason::EntityLimit);
+        let model = layouts
+            .iter()
+            .position(|layout| layout.kind == LayoutKind::Model)
+            .filter(|index| *index >= max)
+            .map(|index| layouts.swap_remove(index));
+        layouts.truncate(max);
+        if let Some(model) = model {
+            layouts.pop();
+            layouts.insert(0, model);
+        }
+    }
+    if !layouts
+        .iter()
+        .any(|layout| layout.kind == LayoutKind::Model)
+    {
+        let block =
+            space_block(block_records, MODEL_SPACE).unwrap_or_else(|| Text::from(MODEL_SPACE));
+        layouts.insert(0, layout(Text::from("Model"), block));
+    }
+    if layouts
+        .iter()
+        .any(|layout| layout.kind == LayoutKind::Paper)
+    {
+        return layouts;
+    }
+    if let Some(block) = space_block(block_records, PAPER_SPACE) {
+        layouts.push(layout(Text::from("Layout1"), block));
+    }
+    layouts
 }
