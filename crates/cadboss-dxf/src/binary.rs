@@ -46,17 +46,33 @@ struct Span {
     next: usize,
 }
 
-/// Reads a 2-byte little-endian code; a leading 255 whose 2-byte reading is not a valid
-/// group code is the R12 escape and the code follows in the next 2 bytes.
-fn read_code(bytes: &[u8], pos: usize) -> Option<(i16, usize)> {
-    let first = *bytes.get(pos)?;
-    let second = *bytes.get(pos + 1)?;
-    let plain = i16::from_le_bytes([first, second]);
-    if first != 255 || (-5..=1071).contains(&plain) {
-        return Some((plain, pos + 2));
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CodeWidth {
+    One,
+    Two,
+}
+
+/// Probes the first pair after the sentinel: `00 'S'` selects one-byte codes, anything else
+/// (including the usual `00 00 'S'`) selects two-byte codes.
+fn detect_code_width(bytes: &[u8]) -> CodeWidth {
+    match bytes.get(SENTINEL.len()..SENTINEL.len() + 3) {
+        Some([0, b'S', _]) => CodeWidth::One,
+        _ => CodeWidth::Two,
     }
-    let high = *bytes.get(pos + 2)?;
-    Some((i16::from_le_bytes([second, high]), pos + 3))
+}
+
+/// Reads a group code. Two-byte codes are little-endian i16; with one-byte codes a byte of 255
+/// escapes to a following two-byte little-endian code.
+fn read_code(bytes: &[u8], pos: usize, width: CodeWidth) -> Option<(i16, usize)> {
+    let first = *bytes.get(pos)?;
+    let wide = width == CodeWidth::Two || first == 255;
+    if !wide {
+        return Some((i16::from(first), pos + 1));
+    }
+    let start = pos + usize::from(width == CodeWidth::One);
+    let low = *bytes.get(start)?;
+    let high = *bytes.get(start + 1)?;
+    Some((i16::from_le_bytes([low, high]), start + 2))
 }
 
 fn read_value(bytes: &[u8], pos: usize, width: ValueWidth) -> Option<Span> {
@@ -95,12 +111,13 @@ pub(crate) fn lex_binary(bytes: &[u8], budget: &Budget) -> Result<(Tape, Report)
     let reserve =
         usize::try_from(budget.max_tokens).map_or(bytes.len() / 6, |max| max.min(bytes.len() / 6));
     let mut builder = Builder::new(reserve);
+    let width = detect_code_width(bytes);
     let mut pos = SENTINEL.len();
     while pos < bytes.len() {
         if builder.at_limit(budget) {
             break;
         }
-        let Some((code, value_pos)) = read_code(bytes, pos) else {
+        let Some((code, value_pos)) = read_code(bytes, pos, width) else {
             builder.report.note(SkipKind::Token, SkipReason::Truncated);
             break;
         };

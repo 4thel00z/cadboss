@@ -177,6 +177,7 @@ impl<'t> Cursor<'t> {
         }
     }
 
+    /// Decodes a numeric value: fixed-width little-endian bytes when the tape is binary, text otherwise.
     pub fn f64(&self, value: &[u8]) -> Option<f64> {
         if self.tape.binary {
             return Some(f64::from_le_bytes(value.try_into().ok()?));
@@ -184,6 +185,7 @@ impl<'t> Cursor<'t> {
         std::str::from_utf8(value).ok()?.trim().parse().ok()
     }
 
+    /// Decodes an integer value by width (1, 2, 4 or 8 bytes) when the tape is binary, text otherwise.
     pub fn i64(&self, value: &[u8]) -> Option<i64> {
         if self.tape.binary {
             return match *value {
