@@ -6,6 +6,7 @@ mod binary;
 mod codepage;
 mod header;
 mod lexer;
+mod record;
 mod tables;
 pub mod tape;
 

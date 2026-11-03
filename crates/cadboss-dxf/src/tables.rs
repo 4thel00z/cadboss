@@ -4,9 +4,8 @@ use cadboss_core::{Report, SkipKind, SkipReason};
 use cadboss_model::{Layer, Text};
 
 use crate::codepage::{decode, Codepage};
+use crate::record::{first, pairs_until, Pair};
 use crate::tape::{Cursor, SectionName, Tape};
-
-type Pair<'a> = (i16, &'a [u8]);
 
 const DEFAULT_COLOR: i16 = 7;
 const FROZEN: i64 = 1;
@@ -46,25 +45,10 @@ fn table_records<'a>(
             continue;
         }
         if inside && value == record {
-            records.push(record_pairs(&mut cursor));
+            records.push(pairs_until(&mut cursor, 0));
         }
     }
     (decoder, records)
-}
-
-fn record_pairs<'a>(cursor: &mut Cursor<'a>) -> Vec<Pair<'a>> {
-    let mut pairs = Vec::new();
-    while cursor.peek_code().is_some_and(|code| code != 0) {
-        pairs.extend(cursor.next());
-    }
-    pairs
-}
-
-fn first<'a>(pairs: &[Pair<'a>], code: i16) -> Option<&'a [u8]> {
-    pairs
-        .iter()
-        .find(|(candidate, _)| *candidate == code)
-        .map(|(_, value)| *value)
 }
 
 pub fn read_layers(tape: &Tape, bytes: &[u8], cp: Codepage, report: &mut Report) -> Vec<Layer> {

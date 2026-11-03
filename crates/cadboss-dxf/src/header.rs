@@ -3,6 +3,7 @@
 use cadboss_core::{BBox, Point, Report, SkipKind, SkipReason};
 use cadboss_model::{Format, Metadata, Text, Units};
 
+use crate::record::{first, pairs_until, Pair};
 use crate::tape::{Cursor, SectionName, Tape};
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -48,7 +49,7 @@ pub fn read_header(tape: &Tape, bytes: &[u8], report: &mut Report) -> Header {
         if code != 9 {
             continue;
         }
-        let values = variable_values(&mut cursor);
+        let values = pairs_until(&mut cursor, 9);
         if !apply(&cursor, &mut header, name, &values) {
             report.note(SkipKind::Table, SkipReason::Malformed);
         }
@@ -56,22 +57,7 @@ pub fn read_header(tape: &Tape, bytes: &[u8], report: &mut Report) -> Header {
     header
 }
 
-fn variable_values<'a>(cursor: &mut Cursor<'a>) -> Vec<(i16, &'a [u8])> {
-    let mut values = Vec::new();
-    while cursor.peek_code().is_some_and(|code| code != 9) {
-        values.extend(cursor.next());
-    }
-    values
-}
-
-fn first<'a>(values: &[(i16, &'a [u8])], code: i16) -> Option<&'a [u8]> {
-    values
-        .iter()
-        .find(|(candidate, _)| *candidate == code)
-        .map(|(_, value)| *value)
-}
-
-fn apply(cursor: &Cursor, header: &mut Header, name: &[u8], values: &[(i16, &[u8])]) -> bool {
+fn apply(cursor: &Cursor, header: &mut Header, name: &[u8], values: &[Pair]) -> bool {
     match name {
         b"$ACADVER" => {
             let Some(value) = first(values, 1) else {
@@ -129,7 +115,7 @@ fn apply(cursor: &Cursor, header: &mut Header, name: &[u8], values: &[(i16, &[u8
     true
 }
 
-fn point(cursor: &Cursor, values: &[(i16, &[u8])]) -> Option<Point> {
+fn point(cursor: &Cursor, values: &[Pair]) -> Option<Point> {
     let x = cursor.f64(first(values, 10)?)?;
     let y = cursor.f64(first(values, 20)?)?;
     let Some(z) = first(values, 30) else {
