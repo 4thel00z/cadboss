@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use std::hint::black_box;
 use std::sync::Arc;
 
@@ -21,7 +19,7 @@ fn lex(c: &mut Criterion) {
     for (name, bytes) in inputs() {
         group.throughput(Throughput::Bytes(bytes.len() as u64));
         group.bench_function(name, |b| {
-            b.iter(|| Tape::lex(black_box(&bytes), &Budget::default()).unwrap())
+            b.iter(|| Tape::lex(black_box(&bytes), &Budget::default()).ok())
         });
     }
     group.finish();
@@ -34,8 +32,8 @@ fn document(c: &mut Criterion) {
         group.bench_function(name, |b| {
             b.iter(|| {
                 DxfDocument::load(black_box(bytes.clone()))
-                    .unwrap()
-                    .document()
+                    .ok()
+                    .map(|loaded| loaded.document())
             })
         });
     }
@@ -45,7 +43,9 @@ fn document(c: &mut Criterion) {
 fn text(c: &mut Criterion) {
     let mut group = c.benchmark_group("text");
     for (name, bytes) in inputs() {
-        let document = DxfDocument::load(bytes.clone()).unwrap();
+        let Ok(document) = DxfDocument::load(bytes.clone()) else {
+            continue;
+        };
         group.throughput(Throughput::Bytes(bytes.len() as u64));
         group.bench_function(name, |b| b.iter(|| black_box(&document).text()));
     }
