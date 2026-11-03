@@ -2,7 +2,6 @@
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Arc;
 
 use cadboss_core::{Report, Result};
 use cadboss_model::Document;
@@ -110,20 +109,20 @@ pub fn read_with_options_reporting(path: &Path, options: &Options) -> Result<(Do
     Ok(DxfDocument::read_with_options(path, options)?.document_reporting())
 }
 
-pub fn load(bytes: impl Into<Arc<[u8]>>) -> Result<Document> {
+pub fn load(bytes: impl Into<Vec<u8>>) -> Result<Document> {
     Ok(DxfDocument::load(bytes)?.document())
 }
 
-pub fn load_with_options(bytes: impl Into<Arc<[u8]>>, options: &Options) -> Result<Document> {
+pub fn load_with_options(bytes: impl Into<Vec<u8>>, options: &Options) -> Result<Document> {
     Ok(DxfDocument::load_with_options(bytes, options)?.document())
 }
 
-pub fn load_reporting(bytes: impl Into<Arc<[u8]>>) -> Result<(Document, Report)> {
+pub fn load_reporting(bytes: impl Into<Vec<u8>>) -> Result<(Document, Report)> {
     Ok(DxfDocument::load(bytes)?.document_reporting())
 }
 
 pub fn load_with_options_reporting(
-    bytes: impl Into<Arc<[u8]>>,
+    bytes: impl Into<Vec<u8>>,
     options: &Options,
 ) -> Result<(Document, Report)> {
     Ok(DxfDocument::load_with_options(bytes, options)?.document_reporting())

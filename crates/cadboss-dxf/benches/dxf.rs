@@ -1,16 +1,15 @@
 use std::hint::black_box;
-use std::sync::Arc;
 
 use cadboss_core::Budget;
 use cadboss_dxf::{DxfDocument, Tape};
 use cadboss_testkit::dxf::{multi_layout, realistic_drawing};
-use criterion::{criterion_group, criterion_main, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BatchSize, Criterion, Throughput};
 
-fn inputs() -> Vec<(&'static str, Arc<[u8]>)> {
+fn inputs() -> Vec<(&'static str, Vec<u8>)> {
     vec![
-        ("realistic_10k", realistic_drawing(10_000).into()),
-        ("realistic_100k", realistic_drawing(100_000).into()),
-        ("multi_layout_50", multi_layout(50).into()),
+        ("realistic_10k", realistic_drawing(10_000)),
+        ("realistic_100k", realistic_drawing(100_000)),
+        ("multi_layout_50", multi_layout(50)),
     ]
 }
 
@@ -30,11 +29,15 @@ fn document(c: &mut Criterion) {
     for (name, bytes) in inputs() {
         group.throughput(Throughput::Bytes(bytes.len() as u64));
         group.bench_function(name, |b| {
-            b.iter(|| {
-                DxfDocument::load(black_box(bytes.clone()))
-                    .ok()
-                    .map(|loaded| loaded.document())
-            })
+            b.iter_batched(
+                || bytes.clone(),
+                |owned| {
+                    DxfDocument::load(black_box(owned))
+                        .ok()
+                        .map(|loaded| loaded.document())
+                },
+                BatchSize::LargeInput,
+            )
         });
     }
     group.finish();

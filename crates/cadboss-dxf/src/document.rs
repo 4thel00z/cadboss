@@ -3,7 +3,6 @@
 use std::collections::HashMap;
 use std::ops::Range;
 use std::path::Path;
-use std::sync::Arc;
 
 use cadboss_core::{BBox, Budget, Point, Report, Result, SkipKind, SkipReason, Source, Transform};
 use cadboss_model::{Block, Entity, EntityKind, Layer, Layout, LayoutKind, Text, TextGroups};
@@ -188,7 +187,7 @@ impl DxfDocument {
     }
 
     pub fn open_with_options(path: &Path, options: &Options) -> Result<DxfDocument> {
-        DxfDocument::assemble(Source::map(path)?, options)
+        DxfDocument::assemble(Source::map(path, &options.budget)?, options)
     }
 
     pub fn open_reporting(path: &Path) -> Result<(DxfDocument, Report)> {
@@ -207,7 +206,7 @@ impl DxfDocument {
     }
 
     pub fn read_with_options(path: &Path, options: &Options) -> Result<DxfDocument> {
-        DxfDocument::assemble(Source::read(path)?, options)
+        DxfDocument::assemble(Source::read(path, &options.budget)?, options)
     }
 
     pub fn read_reporting(path: &Path) -> Result<(DxfDocument, Report)> {
@@ -221,23 +220,20 @@ impl DxfDocument {
         DxfDocument::read_with_options(path, options).map(DxfDocument::reporting)
     }
 
-    pub fn load(bytes: impl Into<Arc<[u8]>>) -> Result<DxfDocument> {
+    pub fn load(bytes: impl Into<Vec<u8>>) -> Result<DxfDocument> {
         DxfDocument::load_with_options(bytes, &Options::default())
     }
 
-    pub fn load_with_options(
-        bytes: impl Into<Arc<[u8]>>,
-        options: &Options,
-    ) -> Result<DxfDocument> {
+    pub fn load_with_options(bytes: impl Into<Vec<u8>>, options: &Options) -> Result<DxfDocument> {
         DxfDocument::assemble(Source::from_bytes(bytes), options)
     }
 
-    pub fn load_reporting(bytes: impl Into<Arc<[u8]>>) -> Result<(DxfDocument, Report)> {
+    pub fn load_reporting(bytes: impl Into<Vec<u8>>) -> Result<(DxfDocument, Report)> {
         DxfDocument::load_with_options_reporting(bytes, &Options::default())
     }
 
     pub fn load_with_options_reporting(
-        bytes: impl Into<Arc<[u8]>>,
+        bytes: impl Into<Vec<u8>>,
         options: &Options,
     ) -> Result<(DxfDocument, Report)> {
         DxfDocument::load_with_options(bytes, options).map(DxfDocument::reporting)

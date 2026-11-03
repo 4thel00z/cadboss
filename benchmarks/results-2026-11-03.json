@@ -1,12 +1,30 @@
 {
-  "benchmark": "text",
-  "entities": 1700000,
-  "input_bytes": 300589943,
-  "peak_rss_bytes": 548814848,
-  "anonymous_bytes": 248224905,
-  "anonymous_ratio": 0.826,
-  "rss_ratio": 1.826,
-  "seconds": 2.3,
+  "runs": [
+    {
+      "benchmark": "cli-text",
+      "entities": 1700000,
+      "input_bytes": 300589943,
+      "peak_rss_bytes": 548814848,
+      "anonymous_bytes": 248224905,
+      "anonymous_ratio": 0.826,
+      "rss_ratio": 1.826,
+      "anonymous_gate": 1.0,
+      "rss_gate": 2.0,
+      "seconds": 1.94
+    },
+    {
+      "benchmark": "py-open-markdown",
+      "entities": 1700000,
+      "input_bytes": 300589943,
+      "peak_rss_bytes": 581058560,
+      "anonymous_bytes": 581058560,
+      "anonymous_ratio": 1.933,
+      "rss_ratio": 1.933,
+      "anonymous_gate": 2.0,
+      "rss_gate": 2.5,
+      "seconds": 3.84
+    }
+  ],
   "hardware": {
     "os": "Darwin 27.0.0",
     "arch": "arm64",

@@ -236,6 +236,31 @@ fn reporting_constructors_return_a_copy_of_the_document_report() -> Result<(), E
 }
 
 #[test]
+fn open_and_read_reject_a_file_past_max_bytes_from_its_length() -> Result<(), Error> {
+    let bytes = simple_drawing();
+    let path = std::env::temp_dir().join(format!("cadboss-budget-{}.dxf", std::process::id()));
+    std::fs::write(&path, &bytes)?;
+    let mut options = Options::default();
+    options.budget.max_bytes = bytes.len() as u64 - 1;
+    let opened = DxfDocument::open_with_options(&path, &options);
+    let read = DxfDocument::read_with_options(&path, &options);
+    options.budget.max_bytes = bytes.len() as u64;
+    let fits = DxfDocument::read_with_options(&path, &options);
+    std::fs::remove_file(&path)?;
+    for result in [opened, read] {
+        assert!(matches!(
+            result,
+            Err(Error::BudgetExceeded {
+                budget: "max_bytes",
+                ..
+            })
+        ));
+    }
+    assert_eq!(fits?.bytes().len(), bytes.len());
+    Ok(())
+}
+
+#[test]
 fn an_empty_file_is_an_empty_error() {
     assert!(matches!(
         DxfDocument::load(Vec::<u8>::new()),

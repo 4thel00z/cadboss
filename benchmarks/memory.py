@@ -6,12 +6,21 @@ import re
 import subprocess
 import sys
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
-ANONYMOUS_LIMIT = 1.0
-RSS_LIMIT = 2.0
 ROOT = Path(__file__).resolve().parent.parent
 DARWIN = sys.platform == "darwin"
+
+
+@dataclass(frozen=True)
+class Gate:
+    anonymous: float
+    rss: float
+
+
+MAPPED_GATE = Gate(anonymous=1.0, rss=2.0)
+OWNED_GATE = Gate(anonymous=2.0, rss=2.5)
 
 
 def run(command: list[str]) -> subprocess.CompletedProcess[str]:
@@ -55,6 +64,11 @@ def cli_binary() -> Path:
     return Path(metadata["target_directory"]) / "release" / "cadboss"
 
 
+def python_interpreter() -> Path:
+    run(["uv", "run", "maturin", "develop", "--release"])
+    return Path(run(["uv", "run", "python", "-c", "import sys; print(sys.executable)"]).stdout.strip())
+
+
 def generate(entities: int, path: Path) -> None:
     run(
         [
@@ -74,10 +88,10 @@ def generate(entities: int, path: Path) -> None:
     )
 
 
-def measure(binary: Path, path: Path) -> tuple[int, float]:
+def measure(command: list[str]) -> tuple[int, float]:
     flag = "-l" if DARWIN else "-v"
     done = subprocess.run(
-        ["/usr/bin/time", flag, str(binary), "text", str(path)],
+        ["/usr/bin/time", flag, *command],
         cwd=ROOT,
         check=True,
         stdout=subprocess.DEVNULL,
@@ -94,39 +108,61 @@ def measure(binary: Path, path: Path) -> tuple[int, float]:
     return peak, seconds
 
 
+def record(
+    benchmark: str,
+    entities: int,
+    input_bytes: int,
+    measured: tuple[int, float],
+    anonymous: int,
+    gate: Gate,
+) -> dict[str, object]:
+    peak, seconds = measured
+    return {
+        "benchmark": benchmark,
+        "entities": entities,
+        "input_bytes": input_bytes,
+        "peak_rss_bytes": peak,
+        "anonymous_bytes": anonymous,
+        "anonymous_ratio": round(anonymous / input_bytes, 3),
+        "rss_ratio": round(peak / input_bytes, 3),
+        "anonymous_gate": gate.anonymous,
+        "rss_gate": gate.rss,
+        "seconds": seconds,
+    }
+
+
+def passes(result: dict[str, object]) -> bool:
+    return result["anonymous_ratio"] <= result["anonymous_gate"] and result["rss_ratio"] <= result["rss_gate"]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--entities", type=int, required=True)
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
     binary = cli_binary()
+    python = python_interpreter()
     with tempfile.TemporaryDirectory() as directory:
         path = Path(directory) / "large.dxf"
         generate(args.entities, path)
         input_bytes = path.stat().st_size
-        peak, seconds = measure(binary, path)
-    anonymous = max(peak - input_bytes, 0)
-    anonymous_ratio = anonymous / input_bytes
-    rss_ratio = peak / input_bytes
-    result = {
-        "benchmark": "text",
-        "entities": args.entities,
-        "input_bytes": input_bytes,
-        "peak_rss_bytes": peak,
-        "anonymous_bytes": anonymous,
-        "anonymous_ratio": round(anonymous_ratio, 3),
-        "rss_ratio": round(rss_ratio, 3),
-        "seconds": seconds,
-        "hardware": hardware(),
-    }
+        cli = measure([str(binary), "text", str(path)])
+        owned = measure([str(python), "-c", f"import cadboss; cadboss.Document.open({str(path)!r}).markdown()"])
+    results = [
+        record("cli-text", args.entities, input_bytes, cli, max(cli[0] - input_bytes, 0), MAPPED_GATE),
+        record("py-open-markdown", args.entities, input_bytes, owned, owned[0], OWNED_GATE),
+    ]
     out = args.out or ROOT / "benchmarks" / f"results-{datetime.date.today().isoformat()}.json"
-    out.write_text(json.dumps(result, indent=2) + "\n")
-    print(
-        f"text {args.entities} entities: input {input_bytes / 1e6:.1f} MB, "
-        f"peak {peak / 1e6:.1f} MB, anonymous ratio {anonymous_ratio:.3f}, "
-        f"rss ratio {rss_ratio:.3f}, {seconds:.2f} s -> {out}"
-    )
-    return int(anonymous_ratio > ANONYMOUS_LIMIT or rss_ratio > RSS_LIMIT)
+    out.write_text(json.dumps({"runs": results, "hardware": hardware()}, indent=2) + "\n")
+    for result in results:
+        print(
+            f"{result['benchmark']} {args.entities} entities: input {input_bytes / 1e6:.1f} MB, "
+            f"peak {result['peak_rss_bytes'] / 1e6:.1f} MB, anonymous ratio {result['anonymous_ratio']:.3f} "
+            f"(gate {result['anonymous_gate']}), rss ratio {result['rss_ratio']:.3f} (gate {result['rss_gate']}), "
+            f"{result['seconds']:.2f} s"
+        )
+    print(f"-> {out}")
+    return int(not all(passes(result) for result in results))
 
 
 if __name__ == "__main__":

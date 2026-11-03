@@ -38,7 +38,7 @@ for item in doc.text("title-block"):
     print(item)
 ```
 
-Text-format input is read from a memory map. In the memory gate run in `benchmarks/results-2026-11-03.json`, a 300 MB DXF with 1.7 million entities was processed in 2.3 seconds with anonymous memory at 0.826x the input size and peak RSS at 1.826x. The gates are 1.0x and 2.0x.
+In the memory gate run in `benchmarks/results-2026-11-03.json`, a 300 MB DXF with 1.7 million entities was processed by `cadboss text` in 1.94 seconds with anonymous memory at 0.826x the input size and peak RSS at 1.826x (gates 1.0x and 2.0x), and by `Document.open(path).markdown()` in 3.84 seconds with peak RSS at 1.933x (gates 2.0x and 2.5x). `benchmarks/README.md` explains the two gates.
 
 ## Development
 

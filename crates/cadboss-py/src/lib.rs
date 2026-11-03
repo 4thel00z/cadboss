@@ -312,7 +312,11 @@ impl PyDocument {
         let options = options(budget)?;
         let buffer = PyBuffer::<u8>::get(data)
             .map_err(|_| PyTypeError::new_err("data must be bytes, bytearray or memoryview"))?;
-        let bytes: Arc<[u8]> = Arc::from(buffer.to_vec(py)?.into_boxed_slice());
+        options
+            .budget
+            .check_bytes(buffer.len_bytes() as u64)
+            .map_err(cad_error)?;
+        let bytes = buffer.to_vec(py)?;
         let document = py
             .allow_threads(|| {
                 DxfDocument::load_with_options(bytes, &options).map(|doc| doc.document())
