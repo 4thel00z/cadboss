@@ -5,6 +5,8 @@ const MODEL_SPACE: &str = "*Model_Space";
 const PAPER_SPACE: &str = "*Paper_Space";
 const ROOT_DICTIONARY: &str = "C";
 const FIRST_HANDLE: u64 = 0x100;
+const BATCH_OWNER: u64 = 0x1F;
+const REALISTIC_FIRST_HANDLE: u64 = 0x1000_0000;
 const MTEXT_CHUNK: usize = 250;
 const XREF_FLAGS: i64 = 36;
 
@@ -82,15 +84,19 @@ struct Out {
     next: u64,
     dimensions: u32,
     imagedefs: Vec<u64>,
+    entities_start: usize,
+    entities_end: usize,
 }
 
 impl Out {
-    fn new() -> Out {
+    fn new(first_handle: u64) -> Out {
         Out {
             records: Vec::new(),
-            next: FIRST_HANDLE,
+            next: first_handle,
             dimensions: 0,
             imagedefs: Vec::new(),
+            entities_start: 0,
+            entities_end: 0,
         }
     }
 
@@ -258,6 +264,7 @@ pub struct DxfBuilder {
     crlf: bool,
     target: Target,
     current_layer: String,
+    first_handle: u64,
 }
 
 /// Same type as `DxfBuilder` with a block as the entity target; `end` returns to model space.
@@ -305,7 +312,13 @@ impl DxfBuilder {
             crlf: false,
             target: Target::Model,
             current_layer: "0".to_string(),
+            first_handle: FIRST_HANDLE,
         }
+    }
+
+    pub fn with_first_handle(mut self, handle: u64) -> DxfBuilder {
+        self.first_handle = handle;
+        self
     }
 
     pub fn version(mut self, version: &'static str) -> DxfBuilder {
@@ -530,6 +543,23 @@ impl DxfBuilder {
         write_ascii(&records, self.crlf)
     }
 
+    /// Returns the bytes before the first model-space entity and the bytes after the last one, so a caller can stream entities between them.
+    pub fn build_around_entities(self) -> (Vec<u8>, Vec<u8>) {
+        let (records, start, end) = self.records_with_entity_span();
+        let head = write_ascii(&records[..start], self.crlf);
+        let tail = write_ascii(&records[end..], self.crlf);
+        (head, tail)
+    }
+
+    /// Returns only the model-space entity records, with handles starting at `with_first_handle`.
+    pub fn entities_only(self) -> Vec<u8> {
+        let mut out = Out::new(self.first_handle);
+        for entity in &self.entities {
+            write_entity(&mut out, entity, BATCH_OWNER, false);
+        }
+        write_ascii(&out.records, self.crlf)
+    }
+
     fn ensure_layer(&mut self, name: &str) {
         if self.layers.iter().any(|layer| layer.name == name) {
             return;
@@ -586,7 +616,11 @@ impl DxfBuilder {
     }
 
     fn records(&self) -> Vec<Record> {
-        let mut out = Out::new();
+        self.records_with_entity_span().0
+    }
+
+    fn records_with_entity_span(&self) -> (Vec<Record>, usize, usize) {
+        let mut out = Out::new(self.first_handle);
         let plan = self.plan(&mut out);
         self.write_header(&mut out);
         self.write_tables(&mut out, &plan);
@@ -594,7 +628,8 @@ impl DxfBuilder {
         self.write_entities(&mut out, &plan);
         self.write_objects(&mut out, &plan);
         out.s(0, "EOF");
-        out.records
+        let (start, end) = (out.entities_start, out.entities_end);
+        (out.records, start, end)
     }
 
     fn write_header(&self, out: &mut Out) {
@@ -693,6 +728,7 @@ impl DxfBuilder {
 
     fn write_entities(&self, out: &mut Out, plan: &Plan) {
         out.begin("ENTITIES");
+        out.entities_start = out.records.len();
         for entity in &self.entities {
             write_entity(out, entity, plan.model_record, false);
         }
@@ -701,6 +737,7 @@ impl DxfBuilder {
                 write_entity(out, entity, *owner, true);
             }
         }
+        out.entities_end = out.records.len();
         out.end();
     }
 
@@ -1062,6 +1099,51 @@ pub fn large_drawing(entities: usize) -> Vec<u8> {
     builder.build()
 }
 
+const REALISTIC_LAYERS: [&str; 4] = ["A-WALL", "A-DOOR", "S-BEAM", "E-LITE"];
+
+fn scatter(index: usize, salt: u64) -> f64 {
+    let mut state = (index as u64 + 1).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ salt;
+    state ^= state >> 29;
+    state = state.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    state ^= state >> 32;
+    (state % 1_000_000_000_000_000) as f64 / 1.0e12
+}
+
+fn point(index: usize, salt: u64) -> (f64, f64) {
+    (scatter(index, salt), scatter(index, salt + 1))
+}
+
+/// A builder holding `count` realistic entities numbered from `start`; handles are unique across disjoint ranges.
+pub fn realistic_batch(start: usize, count: usize) -> DxfBuilder {
+    let mut builder = DxfBuilder::new().with_first_handle(REALISTIC_FIRST_HANDLE + start as u64);
+    for name in REALISTIC_LAYERS {
+        builder = builder.layer(name, 7);
+    }
+    for index in start..start + count {
+        builder = builder.on_layer(REALISTIC_LAYERS[index % REALISTIC_LAYERS.len()]);
+        builder = match index % 20 {
+            0..=13 => builder.line(point(index, 1), point(index, 3)),
+            14..=16 => {
+                let corners: Vec<(f64, f64, f64)> = (0..4u64)
+                    .map(|corner| {
+                        let (x, y) = point(index, 5 + 2 * corner);
+                        (x, y, 0.0)
+                    })
+                    .collect();
+                builder.lwpolyline(&corners, false)
+            }
+            17..=18 => builder.text("ROOM 12-A.04", point(index, 13), 2.5),
+            _ => builder.circle(point(index, 15), scatter(index, 17) / 100.0),
+        };
+    }
+    builder
+}
+
+/// A drawing shaped like real files: handles, owners, subclass markers, full-precision coordinates and a LINE/LWPOLYLINE/TEXT/CIRCLE mix.
+pub fn realistic_drawing(entities: usize) -> Vec<u8> {
+    realistic_batch(0, entities).build()
+}
+
 pub fn nested_inserts(depth: usize) -> Vec<u8> {
     let mut builder = DxfBuilder::new();
     for level in 0..=depth {
@@ -1157,6 +1239,37 @@ mod tests {
     fn large_drawing_writes_n_lines() {
         let bytes = large_drawing(250);
         assert_eq!(count_records(&bytes, SectionName::Entities, b"LINE"), 250);
+    }
+
+    #[test]
+    fn realistic_drawing_mixes_the_four_kinds() {
+        let bytes = realistic_drawing(200);
+        assert_eq!(count_records(&bytes, SectionName::Entities, b"LINE"), 140);
+        assert_eq!(
+            count_records(&bytes, SectionName::Entities, b"LWPOLYLINE"),
+            30
+        );
+        assert_eq!(count_records(&bytes, SectionName::Entities, b"TEXT"), 20);
+        assert_eq!(count_records(&bytes, SectionName::Entities, b"CIRCLE"), 10);
+    }
+
+    #[test]
+    fn streamed_batches_equal_one_drawing_modulo_handles() {
+        let (head, tail) = realistic_batch(0, 0).build_around_entities();
+        let mut streamed = head;
+        streamed.extend(realistic_batch(0, 30).entities_only());
+        streamed.extend(realistic_batch(30, 30).entities_only());
+        streamed.extend(tail);
+        let (tape, report) = Tape::lex(&streamed, &Budget::default()).unwrap();
+        assert!(report.is_empty());
+        let range = tape.section(SectionName::Entities).unwrap();
+        let handles: Vec<Vec<u8>> = Cursor::new(&tape, &streamed, range.start..range.end)
+            .filter(|(code, _)| *code == 5)
+            .map(|(_, value)| value.to_vec())
+            .collect();
+        let unique: std::collections::HashSet<&Vec<u8>> = handles.iter().collect();
+        assert_eq!(handles.len(), 60);
+        assert_eq!(unique.len(), 60);
     }
 
     type Pairs = Vec<(i16, Vec<u8>)>;
