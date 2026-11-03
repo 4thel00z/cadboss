@@ -5,7 +5,7 @@ description: Use when reading, extracting text or metadata from, or exploring CA
 
 # cadboss
 
-Reads DXF files (ASCII and binary) and prints metadata, text, Markdown or JSON. Every command accepts `--budget KEY=VALUE` (repeatable; keys: `max_bytes`, `max_entities`, `max_layouts`, `max_nesting`, `max_string_bytes`, `max_tokens`) and `--threads N`. Skipped content is reported on stderr as `warning: ...`. Exit code 1 means a bad input file, 2 means bad arguments or a bad jq program; a `--layout` that names no layout exits 2 and lists the available ones.
+Reads DXF files (ASCII and binary) and prints metadata, text, Markdown or JSON. Every command accepts `--budget KEY=VALUE` (repeatable; keys: `max_bytes`, `max_entities`, `max_layouts`, `max_nesting`, `max_string_bytes`, `max_tokens`) and `--threads N` (reserved, currently unused). Skipped content is reported on stderr as `warning: ...`. The CLI memory-maps the input, so do not run it on a file another program is still writing. Exit code 1 means a bad input file, 2 means bad arguments or a bad jq program; a `--layout` that names no layout exits 2 and lists the available ones.
 
 ## Commands
 

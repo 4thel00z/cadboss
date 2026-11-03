@@ -1,4 +1,4 @@
-//! Text, JSON and rendering output for cadboss models.
+//! JSON and Markdown output for cadboss models.
 
 #![deny(unsafe_code)]
 

@@ -1,6 +1,6 @@
 # cadboss
 
-A from-scratch Rust reader for CAD files. It extracts text, metadata and structure, and renders drawings. It ships as a command-line tool and as Python bindings. DXF (ASCII and binary, R12 through R2018) is supported today.
+A from-scratch Rust reader for CAD files. It extracts text, metadata and structure. It ships as a command-line tool and as Python bindings. DXF (ASCII and binary, R12 through R2018) is supported today.
 
 ## Install
 
@@ -27,7 +27,9 @@ cadboss layers plan.dxf
 cadboss obj plan.dxf 1F
 ```
 
-Every command accepts `--budget KEY=VALUE` (`max_bytes`, `max_entities`, `max_layouts`, `max_nesting`, `max_string_bytes`, `max_tokens`) and `--threads N`. Skipped content is reported on stderr.
+Every command accepts `--budget KEY=VALUE` (`max_bytes`, `max_entities`, `max_layouts`, `max_nesting`, `max_string_bytes`, `max_tokens`). `--threads N` is reserved and currently unused. Skipped content is reported on stderr.
+
+The CLI memory-maps the input file. Truncating or rewriting that file while `cadboss` runs can crash the process, so do not point it at a file another program is still writing; copy the file first.
 
 ```python
 from cadboss import Document
@@ -37,6 +39,8 @@ print(doc.layers, doc.layouts, doc.units)
 for item in doc.text("title-block"):
     print(item)
 ```
+
+The Python package never maps a file: `Document.open(path)` reads the file into one buffer after checking its size against `max_bytes`, and `Document.load(data)` copies the bytes it is given.
 
 In the memory gate run in `benchmarks/results-2026-11-03.json`, a 300 MB DXF with 1.7 million entities was processed by `cadboss text` in 1.94 seconds with anonymous memory at 0.826x the input size and peak RSS at 1.826x (gates 1.0x and 2.0x), and by `Document.open(path).markdown()` in 3.84 seconds with peak RSS at 1.933x (gates 2.0x and 2.5x). `benchmarks/README.md` explains the two gates.
 

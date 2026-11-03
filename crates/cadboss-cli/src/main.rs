@@ -28,6 +28,7 @@ use crate::failure::Failure;
 struct Common {
     #[arg(long, value_name = "KEY=VALUE", global = true, action = clap::ArgAction::Append)]
     budget: Vec<String>,
+    /// Reserved for internal parallelism; currently unused.
     #[arg(long, value_name = "N", global = true, default_value_t = 1)]
     threads: usize,
 }
@@ -36,7 +37,8 @@ struct Common {
 #[command(
     name = "cadboss",
     version,
-    about = "CAD parsing, text extraction and rendering"
+    about = "Reads CAD files and prints their text, metadata and structure",
+    long_about = "Reads CAD files (DXF today) and prints their text, metadata and structure.\n\nThe input file is memory-mapped. Truncating or rewriting it while cadboss runs can crash the process, so do not point cadboss at a file another program is still writing; copy it first."
 )]
 struct Cli {
     #[command(flatten)]
