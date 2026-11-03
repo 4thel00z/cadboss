@@ -46,10 +46,10 @@ fn metadata(doc: &Document) -> String {
 fn extents_text(extents: &BBox) -> String {
     format!(
         "({}, {}) to ({}, {})",
-        number(extents.min.x),
-        number(extents.min.y),
-        number(extents.max.x),
-        number(extents.max.y)
+        format_number(extents.min.x),
+        format_number(extents.min.y),
+        format_number(extents.max.x),
+        format_number(extents.max.y)
     )
 }
 
@@ -98,7 +98,7 @@ fn layer_groups(annotations: &[&TextItem]) -> Vec<String> {
 fn annotation(item: &TextItem) -> String {
     let text = inline(&item.text.to_string());
     match item.height {
-        Some(height) => format!("{text} (h {})", number(height)),
+        Some(height) => format!("{text} (h {})", format_number(height)),
         None => text,
     }
 }
@@ -157,7 +157,7 @@ fn cell(text: &str) -> String {
     inline(text).replace('|', "\\|")
 }
 
-fn number(value: f64) -> String {
+pub fn format_number(value: f64) -> String {
     let fixed = format!("{value:.2}");
     let trimmed = if fixed.contains('.') {
         fixed.trim_end_matches('0').trim_end_matches('.')
@@ -210,9 +210,9 @@ mod tests {
 
     #[test]
     fn numbers_trim_trailing_zeros() {
-        assert_eq!(number(0.0), "0");
-        assert_eq!(number(65.0), "65");
-        assert_eq!(number(12.5), "12.5");
-        assert_eq!(number(-0.001), "0");
+        assert_eq!(format_number(0.0), "0");
+        assert_eq!(format_number(65.0), "65");
+        assert_eq!(format_number(12.5), "12.5");
+        assert_eq!(format_number(-0.001), "0");
     }
 }

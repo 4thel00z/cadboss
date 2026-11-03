@@ -1,0 +1,182 @@
+use std::path::{Path, PathBuf};
+use std::process::{Command, Output};
+
+type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+fn fixture(name: &str) -> String {
+    format!("{}/../../tests/fixtures/{name}", env!("CARGO_MANIFEST_DIR"))
+}
+
+fn temp_file(name: &str, bytes: &[u8]) -> Result<PathBuf, std::io::Error> {
+    let path = std::env::temp_dir().join(format!("cadboss-cli-{}-{name}", std::process::id()));
+    std::fs::write(&path, bytes)?;
+    Ok(path)
+}
+
+fn cadboss(args: &[&str]) -> Result<Output, std::io::Error> {
+    Command::new(env!("CARGO_BIN_EXE_cadboss"))
+        .args(args)
+        .env("NO_COLOR", "1")
+        .output()
+}
+
+fn stdout(output: &Output) -> String {
+    String::from_utf8_lossy(&output.stdout).into_owned()
+}
+
+fn stderr(output: &Output) -> String {
+    String::from_utf8_lossy(&output.stderr).into_owned()
+}
+
+fn path_text(path: &Path) -> String {
+    path.display().to_string()
+}
+
+#[test]
+fn info_prints_format_and_counts() -> TestResult {
+    let output = cadboss(&["info", &fixture("simple.dxf")])?;
+    assert_eq!(output.status.code(), Some(0));
+    let text = stdout(&output);
+    assert!(text.starts_with("Format: DXF AC1027\nUnits: Millimeters\nLayers: "));
+    assert!(text.contains("\nLayouts: 2 (Model, Layout1)\nEntities: "));
+    assert!(text.contains("\nExtents: ("));
+    Ok(())
+}
+
+#[test]
+fn text_lists_the_title_block_item() -> TestResult {
+    let output = cadboss(&["text", &fixture("simple.dxf")])?;
+    assert_eq!(output.status.code(), Some(0));
+    let text = stdout(&output);
+    assert!(text.contains("# title-block\nTITLE: PUMP P-101\n"));
+    let single = cadboss(&[
+        "text",
+        &fixture("simple.dxf"),
+        "--group",
+        "title-block",
+        "--layout",
+        "Layout1",
+    ])?;
+    assert_eq!(stdout(&single), "TITLE: PUMP P-101\n");
+    Ok(())
+}
+
+#[test]
+fn md_output_equals_the_output_crate() -> TestResult {
+    let path = fixture("simple.dxf");
+    let output = cadboss(&["md", &path])?;
+    let document = cadboss_dxf::open(Path::new(&path))?;
+    assert_eq!(
+        stdout(&output),
+        cadboss_output::to_markdown(&document, "simple")
+    );
+    let titled = cadboss(&["md", &path, "--title", "Pump"])?;
+    assert!(stdout(&titled).starts_with("# Pump\n"));
+    Ok(())
+}
+
+#[test]
+fn json_is_valid_and_has_metadata_first() -> TestResult {
+    let output = cadboss(&["json", &fixture("simple.dxf"), "--entities"])?;
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    let object = value.as_object().ok_or("not an object")?;
+    assert_eq!(object.keys().next().map(String::as_str), Some("metadata"));
+    let entities = object
+        .get("entities")
+        .and_then(|entities| entities.get("Model"))
+        .and_then(serde_json::Value::as_array)
+        .ok_or("no model entities")?;
+    assert!(!entities.is_empty());
+    let compact = cadboss(&["json", &fixture("simple.dxf"), "--compact"])?;
+    assert_eq!(stdout(&compact).lines().count(), 1);
+    Ok(())
+}
+
+#[test]
+fn q_extracts_the_version_with_a_jq_program() -> TestResult {
+    let output = cadboss(&["q", &fixture("simple.dxf"), ".metadata.version"])?;
+    assert_eq!(stdout(&output), "\"AC1027\"\n");
+    let raw = cadboss(&["q", &fixture("simple.dxf"), ".metadata.version", "-r"])?;
+    assert_eq!(stdout(&raw), "AC1027\n");
+    let broken = cadboss(&["q", &fixture("simple.dxf"), ".metadata |"])?;
+    assert_eq!(broken.status.code(), Some(2));
+    Ok(())
+}
+
+#[test]
+fn obj_dumps_the_pairs_of_a_handle() -> TestResult {
+    let output = cadboss(&["obj", &fixture("simple.dxf"), "112"])?;
+    assert_eq!(output.status.code(), Some(0));
+    assert!(stdout(&output).starts_with("0\tLINE\n5\t112\n"));
+    let missing = cadboss(&["obj", &fixture("simple.dxf"), "ffff"])?;
+    assert_eq!(missing.status.code(), Some(1));
+    assert!(stderr(&missing).contains("handle not found"));
+    Ok(())
+}
+
+#[test]
+fn png_input_exits_1_with_not_dxf() -> TestResult {
+    let path = temp_file("image.png", b"\x89PNG\r\n\x1a\nrest")?;
+    let output = cadboss(&["info", &path_text(&path)])?;
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stderr(&output).contains("not a dxf file"));
+    Ok(())
+}
+
+#[test]
+fn empty_file_exits_1_with_empty() -> TestResult {
+    let path = temp_file("empty.dxf", b"")?;
+    let output = cadboss(&["info", &path_text(&path)])?;
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stderr(&output).contains("empty input"));
+    Ok(())
+}
+
+#[test]
+fn nested_70_exits_0_and_warns_about_the_nesting_limit() -> TestResult {
+    let output = cadboss(&["text", &fixture("nested-70.dxf")])?;
+    assert_eq!(output.status.code(), Some(0));
+    assert!(stderr(&output).contains("nesting_limit"));
+    Ok(())
+}
+
+#[test]
+fn budget_flag_caps_entities() -> TestResult {
+    let path = temp_file("large.dxf", &cadboss_testkit::dxf::large_drawing(10))?;
+    let output = cadboss(&["info", &path_text(&path), "--budget", "max_entities=3"])?;
+    assert!(stdout(&output).contains("Entities: 3"));
+    assert!(stderr(&output).contains("entity_limit"));
+    let bad = cadboss(&["info", &path_text(&path), "--budget", "bogus=3"])?;
+    assert_eq!(bad.status.code(), Some(2));
+    Ok(())
+}
+
+#[test]
+fn layouts_and_layers_list_one_per_line() -> TestResult {
+    let layouts = cadboss(&["layouts", &fixture("simple.dxf")])?;
+    assert!(stdout(&layouts).starts_with("Model\tModel\t"));
+    let layers = cadboss(&["layers", &fixture("simple.dxf")])?;
+    assert!(stdout(&layers)
+        .lines()
+        .all(|line| line.split('\t').count() == 3));
+    Ok(())
+}
+
+#[test]
+fn skill_show_prints_front_matter() -> TestResult {
+    let output = cadboss(&["skill", "show"])?;
+    assert!(stdout(&output).starts_with("---\nname: cadboss\n"));
+    Ok(())
+}
+
+#[test]
+fn skill_copies_are_identical() -> TestResult {
+    let packaged = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/skill/SKILL.md"))?;
+    let published = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../skills/cadboss/SKILL.md"
+    ))?;
+    assert_eq!(packaged, published);
+    assert!(!packaged.contains('\u{2014}'));
+    Ok(())
+}

@@ -32,6 +32,7 @@ serde_json = { version = "1", features = ["preserve_order"] }
 clap = { version = "4.6", features = ["derive"] }
 jaq-core = "3"
 jaq-std = "3"
+jaq-json = "2"
 pyo3 = { version = "0.25", features = ["abi3-py312"] }
 criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
 

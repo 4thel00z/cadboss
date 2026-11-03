@@ -247,6 +247,14 @@ impl DxfDocument {
         &self.report
     }
 
+    pub fn tape(&self) -> &Tape {
+        &self.tape
+    }
+
+    pub fn bytes(&self) -> &[u8] {
+        self.source.bytes()
+    }
+
     pub fn header(&self) -> &Header {
         &self.header
     }
