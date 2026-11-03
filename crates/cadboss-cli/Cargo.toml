@@ -25,4 +25,4 @@ jaq-std.workspace = true
 jaq-json.workspace = true
 
 [dev-dependencies]
-cadboss-testkit.workspace = true
+cadboss-testkit = { path = "../cadboss-testkit" }

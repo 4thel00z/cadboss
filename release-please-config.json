@@ -6,7 +6,7 @@
     ".": {
       "package-name": "cadboss",
       "include-component-in-tag": false,
-      "extra-files": ["pyproject.toml"]
+      "extra-files": ["Cargo.toml", "pyproject.toml"]
     }
   }
 }

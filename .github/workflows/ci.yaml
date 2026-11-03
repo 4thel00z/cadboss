@@ -24,6 +24,13 @@ jobs:
       - run: make test
       - run: make doc
 
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: make package
+
   fuzz:
     runs-on: ubuntu-latest
     continue-on-error: false

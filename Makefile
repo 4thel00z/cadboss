@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: build release fmt fmt-check lint test ci develop test-py wheel doc bench samples fuzz help
+.PHONY: build release fmt fmt-check lint test ci package develop test-py wheel doc bench samples fuzz help
 
 ##@ Build
 
@@ -26,7 +26,10 @@ test: ## Run the Rust test suite
 doc: ## Build API docs with warnings denied
 	RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
 
-ci: fmt-check lint test doc ## Run every check CI runs
+ci: fmt-check lint test doc ## Run the fmt, lint, test and doc checks of CI
+
+package: ## Package and build every published crate the way crates.io receives it
+	cargo package --workspace --exclude cadboss-py --exclude cadboss-testkit
 
 ##@ Python
 
