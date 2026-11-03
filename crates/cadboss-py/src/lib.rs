@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use cadboss_core::{Budget, Skipped};
+use cadboss_core::Skipped;
 use cadboss_dxf::{DxfDocument, Options};
 use cadboss_model::{Document, Text, TextItem, TextSource};
 use cadboss_output::{to_json, to_json_compact, to_markdown};
@@ -69,22 +69,6 @@ fn source_label(source: TextSource) -> &'static str {
     }
 }
 
-fn apply_budget(budget: &mut Budget, key: &str, value: u64) -> Result<(), String> {
-    let narrow = |value: u64| {
-        u32::try_from(value).map_err(|_| format!("budget value too large for {key}: {value}"))
-    };
-    match key {
-        "max_bytes" => budget.max_bytes = value,
-        "max_entities" => budget.max_entities = value,
-        "max_tokens" => budget.max_tokens = value,
-        "max_layouts" => budget.max_layouts = narrow(value)?,
-        "max_nesting" => budget.max_nesting = narrow(value)?,
-        "max_string_bytes" => budget.max_string_bytes = narrow(value)?,
-        other => return Err(format!("unknown budget key: {other}")),
-    }
-    Ok(())
-}
-
 fn options(budget: Option<&Bound<'_, PyDict>>) -> PyResult<Options> {
     let mut options = Options::default();
     let Some(budget) = budget else {
@@ -104,7 +88,10 @@ fn options(budget: Option<&Bound<'_, PyDict>>) -> PyResult<Options> {
                 "budget value for {key} must be a non-negative integer"
             ))
         })?;
-        apply_budget(&mut options.budget, &key, value).map_err(PyValueError::new_err)?;
+        options
+            .budget
+            .set(&key, value)
+            .map_err(|error| PyValueError::new_err(format!("{error}: {key}")))?;
     }
     Ok(options)
 }
@@ -472,28 +459,6 @@ mod tests {
             },
             report: cadboss_core::Report::default(),
         }
-    }
-
-    #[test]
-    fn budget_keys_set_their_fields() {
-        let mut budget = Budget::default();
-        apply_budget(&mut budget, "max_bytes", 5).ok();
-        apply_budget(&mut budget, "max_nesting", 3).ok();
-        assert_eq!(budget.max_bytes, 5);
-        assert_eq!(budget.max_nesting, 3);
-    }
-
-    #[test]
-    fn unknown_budget_key_is_rejected() {
-        let mut budget = Budget::default();
-        let error = apply_budget(&mut budget, "max_nothing", 1);
-        assert_eq!(error, Err("unknown budget key: max_nothing".to_owned()));
-    }
-
-    #[test]
-    fn oversized_narrow_budget_value_is_rejected() {
-        let mut budget = Budget::default();
-        assert!(apply_budget(&mut budget, "max_layouts", u64::MAX).is_err());
     }
 
     #[test]

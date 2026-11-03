@@ -159,6 +159,16 @@ fn budget_flag_caps_entities() -> TestResult {
     assert!(stderr(&output).contains("entity_limit"));
     let bad = cadboss(&["info", &path_text(&path.0), "--budget", "bogus=3"])?;
     assert_eq!(bad.status.code(), Some(2));
+    assert!(stderr(&bad)
+        .starts_with("cadboss: invalid --budget bogus=3: unknown budget key (keys: max_bytes,"));
+    let large = cadboss(&[
+        "info",
+        &path_text(&path.0),
+        "--budget",
+        "max_nesting=4294967296",
+    ])?;
+    assert_eq!(large.status.code(), Some(2));
+    assert!(stderr(&large).contains("value too large"));
     Ok(())
 }
 

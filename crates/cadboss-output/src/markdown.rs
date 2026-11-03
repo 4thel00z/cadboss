@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use cadboss_core::BBox;
-use cadboss_model::{Document, Layout, Text, TextItem};
+use cadboss_model::{format_number, Document, Layout, Text, TextItem};
 
 pub fn to_markdown(doc: &Document, title: &str) -> String {
     let mut blocks = vec![format!("# {title}"), metadata(doc)];
@@ -160,15 +160,6 @@ fn cell(text: &str) -> String {
     one_line(text).replace('|', "\\|")
 }
 
-pub fn format_number(value: f64) -> String {
-    let fixed = format!("{value:.2}");
-    let trimmed = fixed.trim_end_matches('0').trim_end_matches('.');
-    if trimmed == "-0" {
-        return "0".to_owned();
-    }
-    trimmed.to_owned()
-}
-
 const MAX_DATE_DAYS: f64 = 1.0e8;
 
 fn date(julian_day: f64) -> String {
@@ -214,13 +205,5 @@ mod tests {
         assert_eq!(date(f64::MAX), format!("JD {}", f64::MAX));
         assert_eq!(date(f64::NAN), "JD NaN");
         assert_eq!(date(-1.0e300), format!("JD {}", -1.0e300));
-    }
-
-    #[test]
-    fn numbers_trim_trailing_zeros() {
-        assert_eq!(format_number(0.0), "0");
-        assert_eq!(format_number(65.0), "65");
-        assert_eq!(format_number(12.5), "12.5");
-        assert_eq!(format_number(-0.001), "0");
     }
 }

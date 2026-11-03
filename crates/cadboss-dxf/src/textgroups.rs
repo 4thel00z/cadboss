@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 
 use cadboss_core::{BBox, Point, Report, SkipKind, SkipReason, Transform};
 use cadboss_model::{
-    Entity, EntityKind, Layout, LayoutKind, Text, TextGroups, TextItem, TextSource,
+    format_number, Entity, EntityKind, Layout, LayoutKind, Text, TextGroups, TextItem, TextSource,
 };
 
 use crate::document::{DxfDocument, LayoutPass};
@@ -299,22 +299,13 @@ fn bottom_right(extents: Option<BBox>, position: Option<Point>) -> bool {
         && position.y < extents.min.y + BOTTOM_RIGHT_SHARE * extents.height()
 }
 
-fn format_measurement(measurement: f64) -> String {
-    let fixed = format!("{measurement:.2}");
-    let trimmed = fixed.trim_end_matches('0').trim_end_matches('.');
-    if trimmed == "-0" {
-        return "0".to_owned();
-    }
-    trimmed.to_owned()
-}
-
 fn dimension_text(text: &Text, measurement: Option<f64>) -> Option<Text> {
     let Some(raw) = text.as_str() else {
         return Some(text.clone()).filter(|text| !text.is_empty());
     };
     let measured = measurement
         .filter(|value| value.is_finite())
-        .map(format_measurement)
+        .map(format_number)
         .unwrap_or_default();
     let shown = match raw {
         "" | "<>" => measured,

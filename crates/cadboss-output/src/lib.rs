@@ -5,5 +5,6 @@
 mod json;
 mod markdown;
 
+pub use cadboss_model::format_number;
 pub use json::{to_json, to_json_compact};
-pub use markdown::{format_number, one_line, to_markdown};
+pub use markdown::{one_line, to_markdown};
