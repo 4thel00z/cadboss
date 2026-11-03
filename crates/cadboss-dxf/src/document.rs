@@ -6,13 +6,14 @@ use std::path::Path;
 use std::sync::Arc;
 
 use cadboss_core::{BBox, Budget, Point, Report, Result, SkipKind, SkipReason, Source, Transform};
-use cadboss_model::{Block, Entity, EntityKind, Layer, Layout, LayoutKind, Text};
+use cadboss_model::{Block, Entity, EntityKind, Layer, Layout, LayoutKind, Text, TextGroups};
 
 use crate::blocks::{read_blocks, BlockDef};
-use crate::codepage::Codepage;
+use crate::codepage::{decode, Codepage};
 use crate::entity::EntityDecoder;
 use crate::header::{read_header, Header};
 use crate::layouts::read_layouts;
+use crate::record::{first, pairs_until, without_groups};
 use crate::tables::{read_block_records, read_layers, BlockRecord};
 use crate::tape::{Cursor, SectionName, Tape};
 
@@ -324,10 +325,22 @@ impl DxfDocument {
     }
 
     pub fn walk(&self, layout: &str, visitor: &mut dyn FnMut(&Entity, &Transform, u32)) -> Report {
+        self.walk_with_path(layout, &mut |entity, transform, path| {
+            visitor(entity, transform, path.len() as u32);
+        })
+    }
+
+    /// Like `walk`, but the visitor receives the names of the blocks entered to reach the entity, outermost first, instead of the depth.
+    pub fn walk_with_path(
+        &self,
+        layout: &str,
+        visitor: &mut dyn FnMut(&Entity, &Transform, &[Text]),
+    ) -> Report {
         let mut walker = Walker {
             document: self,
             visitor,
             report: Report::default(),
+            names: Vec::new(),
             path: self.layout_block(layout).into_iter().collect(),
             nesting_noted: false,
             visited: 0,
@@ -335,6 +348,35 @@ impl DxfDocument {
         };
         walker.run(self.entities(layout), &Transform::identity(), 0);
         walker.report
+    }
+
+    pub fn text(&self) -> TextGroups {
+        self.text_reporting().0
+    }
+
+    pub fn text_reporting(&self) -> (TextGroups, Report) {
+        crate::textgroups::collect(self)
+    }
+
+    pub(crate) fn image_defs(&self, report: &mut Report) -> Vec<(u64, Text)> {
+        let Some(section) = self.tape.section(SectionName::Objects) else {
+            return Vec::new();
+        };
+        let mut cursor = Cursor::new(&self.tape, self.source.bytes(), section.start..section.end);
+        let mut defs = Vec::new();
+        while let Some((code, value)) = cursor.next() {
+            if code != 0 || value != b"IMAGEDEF" {
+                continue;
+            }
+            let pairs = without_groups(pairs_until(&mut cursor, 0));
+            let handle = first(&pairs, 5).and_then(|value| cursor.handle(value));
+            let (Some(handle), Some(path)) = (handle, first(&pairs, 1)) else {
+                report.note(SkipKind::Object, SkipReason::Malformed);
+                continue;
+            };
+            defs.push((handle, decode(self.cp, path, report)));
+        }
+        defs
     }
 
     pub fn layout_extents(&self, layout: &str) -> Option<BBox> {
@@ -361,8 +403,9 @@ fn point_bbox(point: Point) -> BBox {
 
 struct Walker<'d, 'v> {
     document: &'d DxfDocument,
-    visitor: &'v mut dyn FnMut(&Entity, &Transform, u32),
+    visitor: &'v mut dyn FnMut(&Entity, &Transform, &[Text]),
     report: Report,
+    names: Vec<Text>,
     path: Vec<usize>,
     nesting_noted: bool,
     visited: u64,
@@ -380,7 +423,7 @@ impl<'d> Walker<'d, '_> {
                 break;
             }
             self.visited += 1;
-            (self.visitor)(&entity, transform, depth);
+            (self.visitor)(&entity, transform, &self.names);
             self.expand(&entity, transform, depth);
         }
         self.report.merge(decoder.into_report());
@@ -430,7 +473,9 @@ impl<'d> Walker<'d, '_> {
             .then(&Transform::insert(*position, *scale, *rotation))
             .then(transform);
         self.path.push(index);
+        self.names.push(block_name.clone());
         self.run(decoder, &child, depth + 1);
+        self.names.pop();
         self.path.pop();
     }
 }

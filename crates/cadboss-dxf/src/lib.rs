@@ -14,6 +14,7 @@ mod mtext;
 mod record;
 mod tables;
 pub mod tape;
+mod textgroups;
 
 pub use binary::SENTINEL;
 pub use blocks::{read_blocks, BlockDef};
