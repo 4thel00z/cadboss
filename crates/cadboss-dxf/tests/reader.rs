@@ -165,3 +165,55 @@ fn document_decodes_the_entities_section_once_across_twenty_layouts() -> Result<
     assert!(model.extents.is_some());
     Ok(())
 }
+
+#[test]
+fn a_paper_layout_body_is_decoded_once_for_the_report() -> Result<(), Error> {
+    let bytes = DxfBuilder::new()
+        .paper_layout("Sheet2")
+        .raw(0, "WIPEOUT")
+        .raw(8, "0")
+        .raw(0, "LINE")
+        .raw(8, "0")
+        .raw(10, "0.0")
+        .raw(20, "0.0")
+        .end()
+        .build();
+    let document = load(bytes)?;
+    assert_eq!(
+        noted(&document.report, SkipKind::Entity, SkipReason::Unknown),
+        1
+    );
+    assert_eq!(
+        noted(&document.report, SkipKind::Entity, SkipReason::Malformed),
+        1
+    );
+    let sheet = document
+        .layouts
+        .iter()
+        .find(|layout| layout.name.as_str() == Some("Sheet2"))
+        .ok_or(Error::Empty)?;
+    assert_eq!(sheet.entity_count, 1);
+    let body = document
+        .blocks
+        .iter()
+        .find(|block| block.name.as_str() == Some("*Paper_Space0"))
+        .ok_or(Error::Empty)?;
+    assert_eq!(body.entity_count, 1);
+    Ok(())
+}
+
+#[test]
+fn a_stray_seqend_is_reported_once_with_two_layouts() -> Result<(), Error> {
+    let bytes = DxfBuilder::new()
+        .raw(0, "SEQEND")
+        .raw(8, "0")
+        .line((0.0, 0.0), (1.0, 1.0))
+        .build();
+    let document = load(bytes)?;
+    assert_eq!(document.layouts.len(), 2);
+    assert_eq!(
+        noted(&document.report, SkipKind::Entity, SkipReason::Malformed),
+        1
+    );
+    Ok(())
+}

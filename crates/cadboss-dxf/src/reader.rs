@@ -18,19 +18,23 @@ fn count(totals: &mut HashMap<String, u64>, entity: &Entity) {
     totals.insert(name.to_owned(), 1);
 }
 
-/// One walk per layout yields counts, extents and text together.
+/// One walk per layout yields counts, extents and text together; a block whose body backs a layout takes that layout's count instead of being decoded again.
 pub(crate) fn assemble(doc: &DxfDocument) -> (Document, Report) {
     let mut report = doc.report().clone();
     let mut totals: HashMap<String, u64> = HashMap::new();
     let survey = survey(doc, &mut |entity| count(&mut totals, entity));
     let mut layouts = doc.layouts().to_vec();
-    for (layout, pass) in layouts.iter_mut().zip(survey.passes) {
+    let mut backing: HashMap<usize, u64> = HashMap::new();
+    for (position, (layout, pass)) in layouts.iter_mut().zip(survey.passes).enumerate() {
         let Some(pass) = pass else {
             continue;
         };
         layout.entity_count = pass.entity_count;
         layout.extents = pass.extents;
         report.merge(pass.decoded);
+        if let Some(block) = doc.body_block(position) {
+            backing.entry(block).or_insert(pass.entity_count);
+        }
     }
     let mut entity_counts: Vec<(String, u64)> = totals.into_iter().collect();
     entity_counts.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
@@ -39,11 +43,14 @@ pub(crate) fn assemble(doc: &DxfDocument) -> (Document, Report) {
         .blocks()
         .cloned()
         .map(|mut block| {
-            let Some(mut decoder) = block
-                .name
-                .as_str()
-                .and_then(|name| doc.block_entities(name))
-            else {
+            let Some(index) = block.name.as_str().and_then(|name| doc.block_index(name)) else {
+                return block;
+            };
+            if let Some(count) = backing.get(&index) {
+                block.entity_count = *count;
+                return block;
+            }
+            let Some(mut decoder) = doc.block_decoder(index) else {
                 return block;
             };
             block.entity_count = decoder.by_ref().count() as u64;
