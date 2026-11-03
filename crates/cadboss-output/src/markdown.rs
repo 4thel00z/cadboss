@@ -1,0 +1,218 @@
+use cadboss_core::BBox;
+use cadboss_model::{Document, Layout, TextItem};
+
+pub fn to_markdown(doc: &Document, title: &str) -> String {
+    let mut blocks = vec![format!("# {title}"), metadata(doc)];
+    blocks.extend(
+        doc.layouts
+            .iter()
+            .flat_map(|layout| layout_blocks(doc, layout)),
+    );
+    blocks.extend(entities(doc));
+    blocks.push(section("Names", &doc.text.names));
+    blocks.extend(optional_section("Attributes", &doc.text.attributes));
+    blocks.extend(optional_section("References", &doc.text.references));
+    blocks.extend(report(doc));
+    let mut out = blocks.join("\n\n");
+    out.push('\n');
+    out
+}
+
+fn metadata(doc: &Document) -> String {
+    let meta = &doc.metadata;
+    let mut lines = vec![
+        "## Metadata".to_owned(),
+        String::new(),
+        format!("- Format: {} {}", meta.format.label(), meta.version),
+        format!("- Units: {}", meta.units.label()),
+        format!("- Layers: {}", meta.layer_count),
+        format!("- Blocks: {}", meta.block_count),
+        format!("- Layouts: {}", meta.layout_count),
+    ];
+    lines.extend(
+        meta.extents
+            .map(|extents| format!("- Extents: {}", extents_text(&extents))),
+    );
+    lines.extend(meta.created.map(|jd| format!("- Created: {}", date(jd))));
+    lines.extend(meta.updated.map(|jd| format!("- Updated: {}", date(jd))));
+    lines.extend(
+        meta.author
+            .as_ref()
+            .map(|author| format!("- Author: {}", inline(&author.to_string()))),
+    );
+    lines.join("\n")
+}
+
+fn extents_text(extents: &BBox) -> String {
+    format!(
+        "({}, {}) to ({}, {})",
+        number(extents.min.x),
+        number(extents.min.y),
+        number(extents.max.x),
+        number(extents.max.y)
+    )
+}
+
+fn layout_blocks(doc: &Document, layout: &Layout) -> Vec<String> {
+    let in_layout = |item: &&TextItem| item.layout == layout.name;
+    let title_block: Vec<&TextItem> = doc.text.title_block.iter().filter(in_layout).collect();
+    let annotations: Vec<&TextItem> = doc.text.annotations.iter().filter(in_layout).collect();
+    let mut blocks = vec![format!("## Layout: {}", inline(&layout.name.to_string()))];
+    if !title_block.is_empty() {
+        blocks.push(bullets(
+            "### Title block",
+            title_block
+                .into_iter()
+                .map(|item| inline(&item.text.to_string())),
+        ));
+    }
+    if annotations.is_empty() {
+        return blocks;
+    }
+    blocks.push("### Text by layer".to_owned());
+    blocks.extend(layer_groups(&annotations));
+    blocks
+}
+
+fn layer_groups(annotations: &[&TextItem]) -> Vec<String> {
+    let mut layers: Vec<&TextItem> = Vec::new();
+    for item in annotations {
+        if !layers.iter().any(|seen| seen.layer == item.layer) {
+            layers.push(item);
+        }
+    }
+    layers
+        .iter()
+        .map(|first| {
+            let heading = format!("#### Layer {}", inline(&first.layer.to_string()));
+            let items = annotations
+                .iter()
+                .filter(|item| item.layer == first.layer)
+                .map(|item| annotation(item));
+            bullets(&heading, items)
+        })
+        .collect()
+}
+
+fn annotation(item: &TextItem) -> String {
+    let text = inline(&item.text.to_string());
+    match item.height {
+        Some(height) => format!("{text} (h {})", number(height)),
+        None => text,
+    }
+}
+
+fn entities(doc: &Document) -> Option<String> {
+    if doc.metadata.entity_counts.is_empty() {
+        return None;
+    }
+    let mut lines = vec![
+        "## Entities".to_owned(),
+        String::new(),
+        "| Type | Count |".to_owned(),
+        "| --- | --- |".to_owned(),
+    ];
+    lines.extend(
+        doc.metadata
+            .entity_counts
+            .iter()
+            .map(|(name, count)| format!("| {} | {count} |", cell(name))),
+    );
+    Some(lines.join("\n"))
+}
+
+fn section(heading: &str, items: &[TextItem]) -> String {
+    bullets(
+        &format!("## {heading}"),
+        items.iter().map(|item| inline(&item.text.to_string())),
+    )
+}
+
+fn optional_section(heading: &str, items: &[TextItem]) -> Option<String> {
+    if items.is_empty() {
+        return None;
+    }
+    Some(section(heading, items))
+}
+
+fn report(doc: &Document) -> Option<String> {
+    if doc.report.is_empty() {
+        return None;
+    }
+    let summary = doc.report.summary();
+    Some(bullets("## Report", summary.split(", ").map(str::to_owned)))
+}
+
+fn bullets(heading: &str, items: impl Iterator<Item = String>) -> String {
+    let mut lines = vec![heading.to_owned(), String::new()];
+    lines.extend(items.map(|item| format!("- {item}")));
+    lines.join("\n")
+}
+
+fn inline(text: &str) -> String {
+    text.replace("\r\n", " ").replace(['\n', '\r'], " ")
+}
+
+fn cell(text: &str) -> String {
+    inline(text).replace('|', "\\|")
+}
+
+fn number(value: f64) -> String {
+    let fixed = format!("{value:.2}");
+    let trimmed = if fixed.contains('.') {
+        fixed.trim_end_matches('0').trim_end_matches('.')
+    } else {
+        fixed.as_str()
+    };
+    match trimmed {
+        "-0" => "0".to_owned(),
+        other => other.to_owned(),
+    }
+}
+
+fn date(julian_day: f64) -> String {
+    let days = (julian_day - 2_440_587.5).floor() as i64;
+    let (year, month, day) = civil_from_days(days);
+    format!("{year:04}-{month:02}-{day:02}")
+}
+
+fn civil_from_days(days: i64) -> (i64, u32, u32) {
+    let shifted = days + 719_468;
+    let era = shifted.div_euclid(146_097);
+    let day_of_era = shifted.rem_euclid(146_097);
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_index = (5 * day_of_year + 2) / 153;
+    let day = (day_of_year - (153 * month_index + 2) / 5 + 1) as u32;
+    let month = if month_index < 10 {
+        month_index + 3
+    } else {
+        month_index - 9
+    } as u32;
+    let year = year_of_era + era * 400 + i64::from(month <= 2);
+    (year, month, day)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn julian_day_2440587_5_is_the_unix_epoch() {
+        assert_eq!(date(2_440_587.5), "1970-01-01");
+    }
+
+    #[test]
+    fn julian_day_2460371_5_is_the_second_of_march_2024() {
+        assert_eq!(date(2_460_371.5), "2024-03-02");
+    }
+
+    #[test]
+    fn numbers_trim_trailing_zeros() {
+        assert_eq!(number(0.0), "0");
+        assert_eq!(number(65.0), "65");
+        assert_eq!(number(12.5), "12.5");
+        assert_eq!(number(-0.001), "0");
+    }
+}

@@ -12,3 +12,10 @@ workspace = true
 
 [dependencies]
 cadboss-model.workspace = true
+cadboss-core.workspace = true
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+cadboss-dxf.workspace = true
+cadboss-testkit.workspace = true

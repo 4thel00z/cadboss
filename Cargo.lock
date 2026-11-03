@@ -102,7 +102,12 @@ dependencies = [
 name = "cadboss-output"
 version = "0.1.0"
 dependencies = [
+ "cadboss-core",
+ "cadboss-dxf",
  "cadboss-model",
+ "cadboss-testkit",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
