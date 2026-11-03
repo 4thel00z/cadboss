@@ -1,0 +1,22 @@
+[package]
+name = "cadboss-py"
+description = "Python bindings for cadboss"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+name = "_cadboss"
+crate-type = ["cdylib"]
+
+[lints]
+workspace = true
+
+[dependencies]
+cadboss-core.workspace = true
+cadboss-model.workspace = true
+cadboss-dxf.workspace = true
+cadboss-output.workspace = true
+pyo3.workspace = true

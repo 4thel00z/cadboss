@@ -1,0 +1,22 @@
+[package]
+name = "cadboss-cli"
+description = "Command-line interface for cadboss"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "cadboss"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+cadboss-core.workspace = true
+cadboss-model.workspace = true
+cadboss-dxf.workspace = true
+cadboss-output.workspace = true
+clap.workspace = true
+serde_json.workspace = true

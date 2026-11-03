@@ -1,0 +1,15 @@
+[package]
+name = "cadboss-dxf"
+description = "DXF reader for cadboss"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+
+[lints]
+workspace = true
+
+[dependencies]
+cadboss-core.workspace = true
+cadboss-model.workspace = true

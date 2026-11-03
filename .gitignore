@@ -1,0 +1,8 @@
+/target
+*.pyc
+__pycache__/
+.venv/
+/python/cadboss/*.so
+/dist
+/wheels
+.superpowers/
