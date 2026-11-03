@@ -92,6 +92,8 @@ name = "cadboss-model"
 version = "0.1.0"
 dependencies = [
  "cadboss-core",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
