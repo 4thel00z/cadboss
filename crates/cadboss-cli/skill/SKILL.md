@@ -27,3 +27,10 @@ Reads DXF files (ASCII and binary) and prints metadata, text, Markdown or JSON. 
   Example: `cadboss obj plan.dxf 1F`
 - `cadboss skill install [-g]` writes this file to `./.claude/skills/cadboss/SKILL.md`, or to `~/.claude/skills/cadboss/SKILL.md` with `-g`; `cadboss skill show` prints it.
   Example: `cadboss skill install -g`
+
+## Python
+
+- Install: `pip install cadboss` (or `uv add cadboss`).
+- `from cadboss import Document; doc = Document.open("plan.dxf")` (also `Document.load(bytes)`); read `doc.layers`, `doc.layouts`, `doc.units`.
+- `doc.text("title-block")` returns `TextItem` objects; groups are title-block, annotations, names, attributes, references, properties, all.
+- `doc.markdown(title="Pump plan")` and `doc.json(compact=True)` return strings; `CadError` signals an unreadable file.
