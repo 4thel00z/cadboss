@@ -81,6 +81,7 @@ struct Out {
     records: Vec<Record>,
     next: u64,
     dimensions: u32,
+    imagedefs: Vec<u64>,
 }
 
 impl Out {
@@ -89,6 +90,7 @@ impl Out {
             records: Vec::new(),
             next: FIRST_HANDLE,
             dimensions: 0,
+            imagedefs: Vec::new(),
         }
     }
 
@@ -181,6 +183,11 @@ enum Kind {
         text: String,
         measurement: f64,
     },
+    Image {
+        definition: usize,
+        at: (f64, f64),
+        size: (f64, f64),
+    },
     Raw(i16, Value),
 }
 
@@ -193,7 +200,10 @@ impl Kind {
                 (center.0 + radius, center.1 + radius),
             ],
             Kind::Lwpolyline { points, .. } => points.iter().map(|p| (p.0, p.1)).collect(),
-            Kind::Text { at, .. } | Kind::Mtext { at, .. } | Kind::Insert { at, .. } => vec![*at],
+            Kind::Text { at, .. }
+            | Kind::Mtext { at, .. }
+            | Kind::Insert { at, .. }
+            | Kind::Image { at, .. } => vec![*at],
             Kind::Dimension { .. } | Kind::Raw(..) => Vec::new(),
         }
     }
@@ -271,6 +281,7 @@ struct Plan {
     layout_dictionary: u64,
     model_layout: u64,
     layouts: Vec<u64>,
+    imagedefs: Vec<u64>,
 }
 
 impl DxfBuilder {
@@ -479,6 +490,20 @@ impl DxfBuilder {
         self
     }
 
+    /// Adds an IMAGE entity whose definition is the IMAGEDEF for `path`, reusing an existing definition with the same path.
+    pub fn image(mut self, path: &str, at: (f64, f64), size: (f64, f64)) -> DxfBuilder {
+        let existing = self.imagedefs.iter().position(|known| known == path);
+        let definition = existing.unwrap_or(self.imagedefs.len());
+        if existing.is_none() {
+            self.imagedefs.push(path.to_string());
+        }
+        self.push(Kind::Image {
+            definition,
+            at,
+            size,
+        })
+    }
+
     pub fn raw(self, code: i16, value: &str) -> DxfBuilder {
         self.push(Kind::Raw(code, typed_value(code, value)))
     }
@@ -530,6 +555,8 @@ impl DxfBuilder {
         let layout_dictionary = out.alloc();
         let model_layout = out.alloc();
         let layouts = self.layouts.iter().map(|_| out.alloc()).collect();
+        let imagedefs: Vec<u64> = self.imagedefs.iter().map(|_| out.alloc()).collect();
+        out.imagedefs = imagedefs.clone();
         Plan {
             layer_table,
             layers,
@@ -540,6 +567,7 @@ impl DxfBuilder {
             layout_dictionary,
             model_layout,
             layouts,
+            imagedefs,
         }
     }
 
@@ -694,8 +722,8 @@ impl DxfBuilder {
             write_layout(out, plan, &layout.name, *handle, index + 1, *record);
         }
 
-        for path in &self.imagedefs {
-            let handle = out.alloc();
+        for (path, handle) in self.imagedefs.iter().zip(&plan.imagedefs) {
+            let handle = *handle;
             out.s(0, "IMAGEDEF");
             out.id(5, handle);
             out.n(330, 0);
@@ -791,6 +819,7 @@ fn write_entity(out: &mut Out, entity: &Entity, owner: u64, paper: bool) {
         Kind::Mtext { .. } => ("MTEXT", "AcDbMText"),
         Kind::Insert { .. } => ("INSERT", "AcDbBlockReference"),
         Kind::Dimension { .. } => ("DIMENSION", "AcDbDimension"),
+        Kind::Image { .. } => ("IMAGE", "AcDbRasterImage"),
     };
     let handle = out.alloc();
     out.s(0, name);
@@ -903,6 +932,17 @@ fn write_body(out: &mut Out, entity: &Entity) -> Vec<(String, String)> {
             out.s(100, "AcDbAlignedDimension");
             out.point(13, 0.0, 0.0, 0.0);
             out.point(14, 0.0, 0.0, 0.0);
+        }
+        Kind::Image {
+            definition,
+            at,
+            size,
+        } => {
+            out.point(10, at.0, at.1, 0.0);
+            out.point(13, size.0, size.1, 0.0);
+            if let Some(handle) = out.imagedefs.get(*definition).copied() {
+                out.id(340, handle);
+            }
         }
         Kind::Raw(..) => {}
     }
@@ -1211,6 +1251,37 @@ mod tests {
                 (1002, b"}".to_vec()),
             ]
         );
+    }
+
+    #[test]
+    fn xref_block_writes_the_path_into_the_block_record() {
+        let bytes = DxfBuilder::new()
+            .xref_block("BASE", "C:/refs/base.dwg")
+            .build();
+        assert!(bytes.windows(18).any(|w| w == b"\nC:/refs/base.dwg\n"));
+        assert_eq!(count_records(&bytes, SectionName::Blocks, b"BLOCK"), 3);
+    }
+
+    #[test]
+    fn imagedef_writes_one_object_per_path() {
+        let bytes = DxfBuilder::new()
+            .imagedef("a.png")
+            .imagedef("b.png")
+            .build();
+        assert_eq!(count_records(&bytes, SectionName::Objects, b"IMAGEDEF"), 2);
+    }
+
+    #[test]
+    fn image_points_its_entity_at_a_shared_imagedef() {
+        let bytes = DxfBuilder::new()
+            .image("a.png", (0.0, 0.0), (4.0, 3.0))
+            .image("a.png", (9.0, 0.0), (4.0, 3.0))
+            .build();
+        assert_eq!(count_records(&bytes, SectionName::Objects, b"IMAGEDEF"), 1);
+        let all = entity_records(&bytes);
+        assert_eq!(all.len(), 2);
+        assert_eq!(first(&all[0], 340), first(&all[1], 340));
+        assert_eq!(first(&all[0], 13), b"4.0");
     }
 
     #[test]
