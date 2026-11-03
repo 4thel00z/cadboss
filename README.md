@@ -42,7 +42,7 @@ for item in doc.text("title-block"):
 
 The Python package never maps a file: `Document.open(path)` reads the file into one buffer after checking its size against `max_bytes`, and `Document.load(data)` copies the bytes it is given.
 
-In the memory gate run in `benchmarks/results-2026-11-03.json`, a 300 MB DXF with 1.7 million entities was processed by `cadboss text` in 1.94 seconds with anonymous memory at 0.826x the input size and peak RSS at 1.826x (gates 1.0x and 2.0x), and by `Document.open(path).markdown()` in 3.84 seconds with peak RSS at 1.933x (gates 2.0x and 2.5x). `benchmarks/README.md` explains the two gates.
+In the memory gate run in `benchmarks/results-2026-11-03.json`, a 300 MB DXF with 1.7 million entities was processed by `cadboss text` in 1.32 seconds with anonymous memory at 0.758x the input size and peak RSS at 1.758x (gates 1.0x and 2.0x), and by `Document.open(path).markdown()` in 1.40 seconds with peak RSS at 1.866x (gates 2.0x and 2.5x). `benchmarks/README.md` explains the two gates.
 
 ## Development
 

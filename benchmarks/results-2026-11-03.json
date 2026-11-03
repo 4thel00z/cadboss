@@ -4,25 +4,25 @@
       "benchmark": "cli-text",
       "entities": 1700000,
       "input_bytes": 300589943,
-      "peak_rss_bytes": 548814848,
-      "anonymous_bytes": 248224905,
-      "anonymous_ratio": 0.826,
-      "rss_ratio": 1.826,
+      "peak_rss_bytes": 528498688,
+      "anonymous_bytes": 227908745,
+      "anonymous_ratio": 0.758,
+      "rss_ratio": 1.758,
       "anonymous_gate": 1.0,
       "rss_gate": 2.0,
-      "seconds": 1.94
+      "seconds": 1.32
     },
     {
       "benchmark": "py-open-markdown",
       "entities": 1700000,
       "input_bytes": 300589943,
-      "peak_rss_bytes": 581058560,
-      "anonymous_bytes": 581058560,
-      "anonymous_ratio": 1.933,
-      "rss_ratio": 1.933,
+      "peak_rss_bytes": 560922624,
+      "anonymous_bytes": 560922624,
+      "anonymous_ratio": 1.866,
+      "rss_ratio": 1.866,
       "anonymous_gate": 2.0,
       "rss_gate": 2.5,
-      "seconds": 3.84
+      "seconds": 1.4
     }
   ],
   "hardware": {
