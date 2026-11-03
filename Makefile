@@ -52,9 +52,10 @@ samples: ## Download and verify the public sample drawings
 
 FUZZ_SECONDS ?= 60
 
-fuzz: ## Run the DXF fuzz target (FUZZ_SECONDS, default 60); skips without nightly and cargo-fuzz
+fuzz: ## Run the DXF fuzz target seeded from tests/fixtures (FUZZ_SECONDS, default 60); skips without nightly and cargo-fuzz
 	@if rustup toolchain list | grep -q nightly && cargo fuzz --version >/dev/null 2>&1; then \
-		cargo +nightly fuzz run dxf_load -- -max_total_time=$(FUZZ_SECONDS); \
+		mkdir -p fuzz/corpus/dxf_load && cp tests/fixtures/*.dxf fuzz/corpus/dxf_load/ && \
+		cargo +nightly fuzz run dxf_load -- -max_total_time=$(FUZZ_SECONDS) -timeout=10 -rss_limit_mb=1024; \
 	else \
 		echo "fuzz skipped: needs a nightly toolchain and cargo-fuzz"; \
 	fi

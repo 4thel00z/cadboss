@@ -50,7 +50,7 @@ Run `make help` to list every target. `make ci` runs the checks CI runs and `mak
 
 - `make samples` downloads the public sample drawings listed in `tests/samples/manifest.toml` and verifies their SHA-256 hashes. `cargo test -p cadboss-dxf --test samples` opens every downloaded sample and skips the rest.
 - `make bench` runs the criterion benchmarks. `benchmarks/README.md` describes the memory gate.
-- `make fuzz` runs the DXF fuzz target for `FUZZ_SECONDS` (default 60) and skips without a nightly toolchain and `cargo-fuzz`.
+- `make fuzz` seeds `fuzz/corpus/dxf_load` from `tests/fixtures`, runs the DXF fuzz target for `FUZZ_SECONDS` (default 60) with a 10 second per-input timeout and a 1024 MB RSS limit, and skips without a nightly toolchain and `cargo-fuzz`.
 
 ## License
 
