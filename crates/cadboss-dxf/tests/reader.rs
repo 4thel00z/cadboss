@@ -217,3 +217,64 @@ fn a_stray_seqend_is_reported_once_with_two_layouts() -> Result<(), Error> {
     );
     Ok(())
 }
+
+#[test]
+fn polylines_and_lightweight_polylines_count_under_their_own_names() -> Result<(), Error> {
+    let bytes = DxfBuilder::new()
+        .lwpolyline(&[(0.0, 0.0, 0.0), (1.0, 1.0, 0.0)], false)
+        .raw(0, "POLYLINE")
+        .raw(8, "0")
+        .raw(0, "VERTEX")
+        .raw(10, "0.0")
+        .raw(20, "0.0")
+        .raw(0, "VERTEX")
+        .raw(10, "2.0")
+        .raw(20, "1.0")
+        .raw(0, "SEQEND")
+        .build();
+    let document = load(bytes)?;
+    assert_eq!(
+        document.metadata.entity_counts,
+        vec![("LWPOLYLINE".to_owned(), 1), ("POLYLINE".to_owned(), 1)]
+    );
+    Ok(())
+}
+
+#[test]
+fn missing_header_extents_fall_back_to_the_model_layout_by_kind() -> Result<(), Error> {
+    let pairs: [(i16, &str); 24] = [
+        (0, "SECTION"),
+        (2, "TABLES"),
+        (0, "TABLE"),
+        (2, "BLOCK_RECORD"),
+        (0, "BLOCK_RECORD"),
+        (5, "A"),
+        (2, "*Model_Space"),
+        (0, "ENDTAB"),
+        (0, "ENDSEC"),
+        (0, "SECTION"),
+        (2, "ENTITIES"),
+        (0, "LINE"),
+        (10, "2"),
+        (20, "3"),
+        (11, "7"),
+        (21, "9"),
+        (0, "ENDSEC"),
+        (0, "SECTION"),
+        (2, "OBJECTS"),
+        (0, "LAYOUT"),
+        (1, "Modell"),
+        (330, "A"),
+        (0, "ENDSEC"),
+        (0, "EOF"),
+    ];
+    let text: String = pairs
+        .iter()
+        .map(|(code, value)| format!("{code}\n{value}\n"))
+        .collect();
+    let document = load(text.into_bytes())?;
+    assert_eq!(document.layouts[0].name.as_str(), Some("Modell"));
+    let extents = document.metadata.extents.ok_or(Error::Empty)?;
+    assert_eq!((extents.min.x, extents.max.y), (2.0, 9.0));
+    Ok(())
+}

@@ -526,6 +526,7 @@ fn lwpolyline(fields: &mut Fields) -> EntityKind {
         points,
         bulges,
         closed: fields.closed(),
+        lightweight: true,
     }
 }
 
@@ -548,6 +549,7 @@ fn polyline<'t>(fields: &mut Fields<'_, 't>, children: Records<'t>) -> EntityKin
         points,
         bulges,
         closed: fields.closed(),
+        lightweight: false,
     }
 }
 

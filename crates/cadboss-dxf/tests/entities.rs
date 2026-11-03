@@ -77,7 +77,8 @@ fn decoder_reads_line_circle_arc_and_polyline_from_builder_output() {
                 Point::xy(4.0, 3.0)
             ],
             bulges: vec![0.0, 0.5, 0.0],
-            closed: true
+            closed: true,
+            lightweight: true
         }
     );
     assert_eq!(entities[0].common.layer, Text::from("0"));
@@ -277,7 +278,8 @@ fn polyline_collects_vertices_until_seqend() {
         EntityKind::Polyline {
             points: vec![Point::xy(0.0, 0.0), Point::xy(2.0, 1.0)],
             bulges: vec![0.5, 0.0],
-            closed: true
+            closed: true,
+            lightweight: false
         }
     );
 }

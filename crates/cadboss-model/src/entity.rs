@@ -51,10 +51,12 @@ pub enum EntityKind {
         start: f64,
         end: f64,
     },
+    /// `lightweight` is set for an LWPOLYLINE record and clear for a POLYLINE with VERTEX records.
     Polyline {
         points: Vec<Point>,
         bulges: Vec<f64>,
         closed: bool,
+        lightweight: bool,
     },
     Spline {
         control: Vec<Point>,
@@ -133,7 +135,12 @@ impl EntityKind {
             EntityKind::Circle { .. } => "CIRCLE",
             EntityKind::Arc { .. } => "ARC",
             EntityKind::Ellipse { .. } => "ELLIPSE",
-            EntityKind::Polyline { .. } => "LWPOLYLINE",
+            EntityKind::Polyline {
+                lightweight: true, ..
+            } => "LWPOLYLINE",
+            EntityKind::Polyline {
+                lightweight: false, ..
+            } => "POLYLINE",
             EntityKind::Spline { .. } => "SPLINE",
             EntityKind::Hatch { .. } => "HATCH",
             EntityKind::Text { .. } => "TEXT",
@@ -207,6 +214,7 @@ impl Entity {
                 points,
                 bulges,
                 closed,
+                ..
             } => polyline_bbox(points, bulges, *closed),
             EntityKind::Spline { control, .. } => points_bbox(control),
             EntityKind::Point { position } => points_bbox(&[*position]),
@@ -285,6 +293,7 @@ mod tests {
             points: vec![Point::xy(0.0, 0.0), Point::xy(2.0, 0.0)],
             bulges: vec![1.0, 0.0],
             closed: false,
+            lightweight: true,
         })
         .bbox()
         .unwrap();
@@ -305,5 +314,17 @@ mod tests {
             end: Point::default(),
         });
         assert_eq!(line.display_type(), "LINE");
+    }
+
+    #[test]
+    fn polyline_type_names_follow_the_record_kind() {
+        let polyline = |lightweight: bool| EntityKind::Polyline {
+            points: vec![],
+            bulges: vec![],
+            closed: false,
+            lightweight,
+        };
+        assert_eq!(polyline(true).type_name(), "LWPOLYLINE");
+        assert_eq!(polyline(false).type_name(), "POLYLINE");
     }
 }
