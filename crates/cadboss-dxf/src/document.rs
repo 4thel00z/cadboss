@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::ops::Range;
 use std::path::Path;
+use std::sync::Arc;
 
 use cadboss_core::{BBox, Budget, Point, Report, Result, SkipKind, SkipReason, Source, Transform};
 use cadboss_model::{Block, Entity, EntityKind, Layer, Layout, LayoutKind, Text, TextGroups};
@@ -21,6 +22,7 @@ type LayoutOf = Box<dyn Fn(Option<u64>, bool) -> Text + Send + Sync>;
 #[derive(Debug, Clone)]
 pub struct Options {
     pub budget: Budget,
+    /// Reserved for internal parallelism; currently unused.
     pub threads: usize,
 }
 
@@ -43,8 +45,10 @@ pub struct DxfDocument {
     blocks: Vec<BlockDef>,
     block_lookup: HashMap<String, usize>,
     layouts: Vec<Layout>,
+    placement: Arc<Placement>,
     layout_of: LayoutOf,
     block_layouts: Vec<LayoutOf>,
+    buckets: Vec<Vec<u32>>,
     report: Report,
 }
 
@@ -59,57 +63,73 @@ impl std::fmt::Debug for DxfDocument {
     }
 }
 
-fn text_bytes(text: &Text) -> &[u8] {
-    match text {
-        Text::Str(text) => text.as_bytes(),
-        Text::Bytes(bytes) => bytes,
+/// The layout an ENTITIES record belongs to, from its owner handle and paper-space flag.
+struct Placement {
+    owners: HashMap<u64, Text>,
+    model: Text,
+    paper: Text,
+}
+
+impl Placement {
+    fn new(
+        block_records: &[BlockRecord],
+        layouts: &[Layout],
+        layout_names: &HashMap<String, Text>,
+    ) -> Placement {
+        let owners = block_records
+            .iter()
+            .filter(|record| record.handle != 0)
+            .filter_map(|record| {
+                let name = layout_names.get(&record.name.as_str()?.to_ascii_lowercase())?;
+                Some((record.handle, name.clone()))
+            })
+            .collect();
+        let model = layouts
+            .iter()
+            .find(|layout| layout.kind == LayoutKind::Model)
+            .map_or_else(|| Text::from("Model"), |layout| layout.name.clone());
+        let paper = layouts
+            .iter()
+            .find(|layout| {
+                layout
+                    .block_name
+                    .as_str()
+                    .is_some_and(|name| name.eq_ignore_ascii_case("*Paper_Space"))
+            })
+            .or_else(|| {
+                layouts
+                    .iter()
+                    .find(|layout| layout.kind == LayoutKind::Paper)
+            })
+            .map_or_else(|| Text::from("Layout1"), |layout| layout.name.clone());
+        Placement {
+            owners,
+            model,
+            paper,
+        }
     }
+
+    fn layout(&self, owner: Option<u64>, paper: bool) -> &Text {
+        if let Some(name) = owner.and_then(|handle| self.owners.get(&handle)) {
+            return name;
+        }
+        if paper {
+            return &self.paper;
+        }
+        &self.model
+    }
+}
+
+/// What one walk over a layout found besides the visits.
+pub(crate) struct LayoutPass {
+    pub(crate) entity_count: u64,
+    pub(crate) extents: Option<BBox>,
+    pub(crate) decoded: Report,
+    pub(crate) walked: Report,
 }
 
 fn constant(text: Text) -> LayoutOf {
     Box::new(move |_, _| text.clone())
-}
-
-fn layout_resolver(
-    block_records: &[BlockRecord],
-    layouts: &[Layout],
-    layout_names: &HashMap<String, Text>,
-) -> LayoutOf {
-    let owners: HashMap<u64, Text> = block_records
-        .iter()
-        .filter(|record| record.handle != 0)
-        .filter_map(|record| {
-            let name = layout_names.get(&record.name.as_str()?.to_ascii_lowercase())?;
-            Some((record.handle, name.clone()))
-        })
-        .collect();
-    let model = layouts
-        .iter()
-        .find(|layout| layout.kind == LayoutKind::Model)
-        .map_or_else(|| Text::from("Model"), |layout| layout.name.clone());
-    let paper = layouts
-        .iter()
-        .find(|layout| {
-            layout
-                .block_name
-                .as_str()
-                .is_some_and(|name| name.eq_ignore_ascii_case("*Paper_Space"))
-        })
-        .or_else(|| {
-            layouts
-                .iter()
-                .find(|layout| layout.kind == LayoutKind::Paper)
-        })
-        .map_or_else(|| Text::from("Layout1"), |layout| layout.name.clone());
-    Box::new(move |owner, paper_flag| {
-        if let Some(name) = owner.and_then(|handle| owners.get(&handle)) {
-            return name.clone();
-        }
-        if paper_flag {
-            return paper.clone();
-        }
-        model.clone()
-    })
 }
 
 impl DxfDocument {
@@ -118,8 +138,8 @@ impl DxfDocument {
         let (tape, mut report) = Tape::lex(bytes, &options.budget)?;
         let header = read_header(&tape, bytes, &mut report);
         let cp = Codepage::from_header(
-            text_bytes(&header.version),
-            header.codepage.as_ref().map(text_bytes),
+            header.version.as_bytes(),
+            header.codepage.as_ref().map(Text::as_bytes),
         );
         let layers = read_layers(&tape, bytes, cp, &mut report);
         let block_records = read_block_records(&tape, bytes, cp, &mut report);
@@ -161,8 +181,11 @@ impl DxfDocument {
                 constant(owner.map_or_else(|| def.block.name.clone(), Text::clone))
             })
             .collect();
-        Ok(DxfDocument {
-            layout_of: layout_resolver(&block_records, &layouts, &layout_names),
+        let placement = Arc::new(Placement::new(&block_records, &layouts, &layout_names));
+        let resolver = Arc::clone(&placement);
+        let mut document = DxfDocument {
+            layout_of: Box::new(move |owner, paper| resolver.layout(owner, paper).clone()),
+            placement,
             source,
             tape,
             header,
@@ -173,8 +196,13 @@ impl DxfDocument {
             block_lookup,
             layouts,
             block_layouts,
+            buckets: Vec::new(),
             report,
-        })
+        };
+        let (buckets, notes) = document.bucket_entities();
+        document.buckets = buckets;
+        document.report.merge(notes);
+        Ok(document)
     }
 
     fn reporting(document: DxfDocument) -> (DxfDocument, Report) {
@@ -239,6 +267,7 @@ impl DxfDocument {
         DxfDocument::load_with_options(bytes, options).map(DxfDocument::reporting)
     }
 
+    /// Notes from opening the document: lexing, tables, blocks, layouts and the structure of the ENTITIES section.
     pub fn report(&self) -> &Report {
         &self.report
     }
@@ -277,42 +306,73 @@ impl DxfDocument {
         EntityDecoder::new(cursor, self.cp, &self.budget, layout_of.as_ref())
     }
 
-    fn block_decoder(&self, index: usize) -> Option<EntityDecoder<'_>> {
+    pub(crate) fn block_decoder(&self, index: usize) -> Option<EntityDecoder<'_>> {
         let def = self.blocks.get(index)?;
         let layout_of = self.block_layouts.get(index)?;
         Some(self.decoder(def.entities.clone(), layout_of))
     }
 
-    /// Entities of `layout`: a paper layout whose block has a non-empty body reads that body; otherwise the ENTITIES section filtered by owner.
+    fn entities_section(&self) -> Range<u32> {
+        self.tape
+            .section(SectionName::Entities)
+            .map_or(0..0, |section| section.start..section.end)
+    }
+
+    /// Walks the ENTITIES section once and lists, per position in `layouts()`, the token index of each record that resolves to that layout.
+    /// Stray VERTEX, ATTRIB and SEQEND records are noted once in the returned report.
+    pub(crate) fn bucket_entities(&self) -> (Vec<Vec<u32>>, Report) {
+        let mut positions: HashMap<&Text, usize> = HashMap::new();
+        for (position, layout) in self.layouts.iter().enumerate() {
+            positions.entry(&layout.name).or_insert(position);
+        }
+        let mut buckets: Vec<Vec<u32>> = vec![Vec::new(); self.layouts.len()];
+        let notes = self.decoder(self.entities_section(), &self.layout_of).skim(
+            &mut |start, owner, paper| {
+                let layout = self.placement.layout(owner, paper);
+                let Some(bucket) = positions
+                    .get(layout)
+                    .and_then(|position| buckets.get_mut(*position))
+                else {
+                    return;
+                };
+                bucket.push(start);
+            },
+        );
+        (buckets, notes)
+    }
+
+    /// Block whose body holds the entities of the layout at `position`: the block of a paper layout when that body is not empty.
+    pub(crate) fn body_block(&self, position: usize) -> Option<usize> {
+        let layout = self.layouts.get(position)?;
+        if layout.kind != LayoutKind::Paper {
+            return None;
+        }
+        let index = self.block_index(layout.block_name.as_str()?)?;
+        self.blocks
+            .get(index)
+            .filter(|def| !def.entities.is_empty())?;
+        Some(index)
+    }
+
+    /// Entities of `layout`: a paper layout whose block has a non-empty body reads that body; otherwise the ENTITIES records that resolve to the layout by owner.
     /// An unknown layout yields nothing.
     pub fn entities(&self, layout: &str) -> EntityDecoder<'_> {
-        let Some(found) = self
+        let Some(position) = self
             .layouts
             .iter()
-            .find(|candidate| candidate.name.as_str() == Some(layout))
+            .position(|candidate| candidate.name.as_str() == Some(layout))
         else {
             return self.decoder(0..0, &self.layout_of);
         };
-        let own_block = found
-            .block_name
-            .as_str()
-            .and_then(|name| self.block_index(name))
-            .filter(|index| {
-                found.kind == LayoutKind::Paper
-                    && self
-                        .blocks
-                        .get(*index)
-                        .is_some_and(|def| !def.entities.is_empty())
-            });
-        if let Some(decoder) = own_block.and_then(|index| self.block_decoder(index)) {
+        if let Some(decoder) = self
+            .body_block(position)
+            .and_then(|index| self.block_decoder(index))
+        {
             return decoder;
         }
-        let range = self
-            .tape
-            .section(SectionName::Entities)
-            .map_or(0..0, |section| section.start..section.end);
-        self.decoder(range, &self.layout_of)
-            .only_layout(found.name.clone())
+        let starts = self.buckets.get(position).map_or(&[][..], Vec::as_slice);
+        self.decoder(self.entities_section(), &self.layout_of)
+            .at(starts)
     }
 
     /// Entities of one block body; `common.layout` is the layout name when the block belongs to a layout, otherwise the block name.
@@ -341,9 +401,32 @@ impl DxfDocument {
         layout: &str,
         visitor: &mut dyn FnMut(&Entity, &Transform, &[Text]),
     ) -> Report {
+        self.pass(layout, &mut |_| {}, visitor).walked
+    }
+
+    /// Walks `layout` once. `top` sees every top-level entity, also those past a walk-wide entity stop, so the count and the decode notes cover the whole layout;
+    /// `visitor` sees every visited entity, and the extents cover the visited ones.
+    pub(crate) fn pass(
+        &self,
+        layout: &str,
+        top: &mut dyn FnMut(&Entity),
+        visitor: &mut dyn FnMut(&Entity, &Transform, &[Text]),
+    ) -> LayoutPass {
+        let mut extents = BBox::empty();
+        let mut entity_count = 0u64;
+        let mut decoder = self.entities(layout);
+        let mut counted = |entity: &Entity| {
+            entity_count += 1;
+            top(entity);
+        };
+        let mut measured = |entity: &Entity, transform: &Transform, path: &[Text]| {
+            extents = extents.union(&extent(entity, transform));
+            visitor(entity, transform, path);
+        };
         let mut walker = Walker {
             document: self,
-            visitor,
+            visitor: &mut measured,
+            top: &mut counted,
             report: Report::default(),
             names: Vec::new(),
             path: self.layout_block(layout).into_iter().collect(),
@@ -351,16 +434,27 @@ impl DxfDocument {
             visited: 0,
             stopped: false,
         };
-        walker.run(self.entities(layout), &Transform::identity(), 0);
-        walker.report
+        walker.run(&mut decoder, &Transform::identity(), 0);
+        let walked = walker.report;
+        for entity in decoder.by_ref() {
+            counted(&entity);
+        }
+        LayoutPass {
+            entity_count,
+            extents: Some(extents).filter(|extents| !extents.is_empty()),
+            decoded: decoder.into_report(),
+            walked,
+        }
     }
 
     pub fn text(&self) -> TextGroups {
         self.text_reporting().0
     }
 
+    /// The returned report carries text-level notes: walk notes, image definitions and layouts whose name is not text.
     pub fn text_reporting(&self) -> (TextGroups, Report) {
-        crate::textgroups::collect(self)
+        let survey = crate::textgroups::survey(self, &mut |_| {});
+        (survey.groups, survey.report)
     }
 
     pub(crate) fn image_defs(&self, report: &mut Report) -> Vec<(u64, Text)> {
@@ -384,31 +478,29 @@ impl DxfDocument {
         defs
     }
 
+    /// Bounding box of every entity visited by `walk`, with text and MTEXT counted at their insertion point; `None` for an empty or unknown layout.
     pub fn layout_extents(&self, layout: &str) -> Option<BBox> {
-        let mut extents = BBox::empty();
-        self.walk(layout, &mut |entity, transform, _| {
-            let bbox = match (&entity.kind, entity.bbox()) {
-                (_, Some(bbox)) => bbox.transform(transform),
-                (EntityKind::Text { position, .. } | EntityKind::MText { position, .. }, None) => {
-                    point_bbox(transform.apply(*position))
-                }
-                _ => return,
-            };
-            extents = extents.union(&bbox);
-        });
-        Some(extents).filter(|extents| !extents.is_empty())
+        self.pass(layout, &mut |_| {}, &mut |_, _, _| {}).extents
     }
 }
 
-fn point_bbox(point: Point) -> BBox {
+fn extent(entity: &Entity, transform: &Transform) -> BBox {
+    if let Some(bbox) = entity.bbox() {
+        return bbox.transform(transform);
+    }
+    let (EntityKind::Text { position, .. } | EntityKind::MText { position, .. }) = &entity.kind
+    else {
+        return BBox::empty();
+    };
     let mut bbox = BBox::empty();
-    bbox.include(point);
+    bbox.include(transform.apply(*position));
     bbox
 }
 
 struct Walker<'d, 'v> {
     document: &'d DxfDocument,
     visitor: &'v mut dyn FnMut(&Entity, &Transform, &[Text]),
+    top: &'v mut dyn FnMut(&Entity),
     report: Report,
     names: Vec<Text>,
     path: Vec<usize>,
@@ -418,8 +510,11 @@ struct Walker<'d, 'v> {
 }
 
 impl<'d> Walker<'d, '_> {
-    fn run(&mut self, decoder: EntityDecoder<'d>, transform: &Transform, depth: u32) {
+    fn run(&mut self, decoder: &mut EntityDecoder<'d>, transform: &Transform, depth: u32) {
         for entity in decoder {
+            if depth == 0 {
+                (self.top)(&entity);
+            }
             if !self.stopped && self.visited >= self.document.budget.max_entities {
                 self.report.note(SkipKind::Entity, SkipReason::EntityLimit);
                 self.stopped = true;
@@ -465,7 +560,7 @@ impl<'d> Walker<'d, '_> {
             }
             return;
         }
-        let Some(decoder) = self.document.block_decoder(index) else {
+        let Some(mut decoder) = self.document.block_decoder(index) else {
             return;
         };
         let base = self
@@ -478,7 +573,7 @@ impl<'d> Walker<'d, '_> {
             .then(transform);
         self.path.push(index);
         self.names.push(block_name.clone());
-        self.run(decoder, &child, depth + 1);
+        self.run(&mut decoder, &child, depth + 1);
         self.names.pop();
         self.path.pop();
     }

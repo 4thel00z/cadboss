@@ -123,3 +123,45 @@ fn malformed_block_body_entity_is_reported_once() -> Result<(), Error> {
     assert_eq!(malformed.count, 1);
     Ok(())
 }
+
+fn noted(report: &cadboss_core::Report, kind: SkipKind, reason: SkipReason) -> u64 {
+    report
+        .skipped
+        .iter()
+        .filter(|entry| entry.kind == kind && entry.reason == reason)
+        .map(|entry| entry.count)
+        .sum()
+}
+
+#[test]
+fn document_decodes_the_entities_section_once_across_twenty_layouts() -> Result<(), Error> {
+    let mut builder = DxfBuilder::new()
+        .raw(0, "WIPEOUT")
+        .raw(8, "0")
+        .raw(0, "SEQEND")
+        .line((0.0, 0.0), (1.0, 1.0));
+    for sheet in 1..=18 {
+        builder = builder
+            .paper_layout(&format!("Sheet{sheet}"))
+            .text(&format!("Sheet {sheet}"), (10.0, 10.0), 2.5)
+            .end();
+    }
+    let document = load(builder.build())?;
+    assert_eq!(document.layouts.len(), 20);
+    assert_eq!(
+        noted(&document.report, SkipKind::Entity, SkipReason::Unknown),
+        1
+    );
+    assert_eq!(
+        noted(&document.report, SkipKind::Entity, SkipReason::Malformed),
+        1
+    );
+    let model = document
+        .layouts
+        .iter()
+        .find(|layout| layout.name.as_str() == Some("Model"))
+        .ok_or(Error::Empty)?;
+    assert_eq!(model.entity_count, 2);
+    assert!(model.extents.is_some());
+    Ok(())
+}

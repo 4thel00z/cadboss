@@ -20,6 +20,14 @@ impl Text {
         }
     }
 
+    /// The UTF-8 bytes of a string or the raw bytes.
+    pub fn as_bytes(&self) -> &[u8] {
+        match self {
+            Text::Str(text) => text.as_bytes(),
+            Text::Bytes(bytes) => bytes,
+        }
+    }
+
     pub fn as_str(&self) -> Option<&str> {
         match self {
             Text::Str(text) => Some(text),

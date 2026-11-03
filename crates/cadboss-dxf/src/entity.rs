@@ -30,6 +30,7 @@ pub struct EntityDecoder<'t> {
     report: Report,
     done: bool,
     layout_filter: Option<Text>,
+    starts: Option<std::slice::Iter<'t, u32>>,
 }
 
 impl<'t> EntityDecoder<'t> {
@@ -48,7 +49,42 @@ impl<'t> EntityDecoder<'t> {
             report: Report::default(),
             done: false,
             layout_filter: None,
+            starts: None,
         }
+    }
+
+    /// Decodes only the records whose code-0 tokens sit at `starts`, in order, instead of every record of the range.
+    pub(crate) fn at(mut self, starts: &'t [u32]) -> EntityDecoder<'t> {
+        self.starts = Some(starts.iter());
+        self
+    }
+
+    /// Walks every record of the range without building entities and hands each record's start, owner handle and paper-space flag to `sink`.
+    /// Records are grouped exactly as decoding groups them; stray VERTEX, ATTRIB and SEQEND records are noted as malformed.
+    pub(crate) fn skim(mut self, sink: &mut dyn FnMut(u32, Option<u64>, bool)) -> Report {
+        while let Some((start, name)) = self.next_name() {
+            if is_child(name) {
+                self.report.note(SkipKind::Entity, SkipReason::Malformed);
+                continue;
+            }
+            let head = Record::until(&mut self.cursor, 0);
+            self.children(name, &head);
+            let owner = head.first(330).and_then(|value| head.handle(value));
+            let paper = head.first(67).and_then(|value| head.i64(value)) == Some(1);
+            sink(start, owner, paper);
+        }
+        self.report
+    }
+
+    fn next_name(&mut self) -> Option<(u32, &'t [u8])> {
+        if let Some(starts) = &mut self.starts {
+            let start = *starts.next()?;
+            self.cursor.seek(start);
+        }
+        self.cursor.skip_to_code_zero();
+        let start = self.cursor.index();
+        let (_, name) = self.cursor.next()?;
+        Some((start, name))
     }
 
     /// Skips entities whose resolved layout differs from `name`; skipped entities do not count toward the budget.
@@ -117,7 +153,7 @@ impl<'t> EntityDecoder<'t> {
 
     fn skip_children(&mut self) {
         while let Some((0, name)) = self.cursor.peek() {
-            if !matches!(name, b"VERTEX" | b"ATTRIB" | b"SEQEND") {
+            if !is_child(name) {
                 return;
             }
             self.cursor.next();
@@ -134,9 +170,8 @@ impl<'t> Iterator for EntityDecoder<'t> {
 
     fn next(&mut self) -> Option<Entity> {
         while !self.done {
-            self.cursor.skip_to_code_zero();
-            let (_, name) = self.cursor.next()?;
-            if matches!(name, b"VERTEX" | b"ATTRIB" | b"SEQEND") {
+            let (_, name) = self.next_name()?;
+            if is_child(name) {
                 self.report.note(SkipKind::Entity, SkipReason::Malformed);
                 continue;
             }
@@ -153,6 +188,10 @@ impl<'t> Iterator for EntityDecoder<'t> {
         }
         None
     }
+}
+
+fn is_child(name: &[u8]) -> bool {
+    matches!(name, b"VERTEX" | b"ATTRIB" | b"SEQEND")
 }
 
 struct Fields<'a, 't> {

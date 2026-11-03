@@ -4,27 +4,33 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use cadboss_core::{Report, Result};
-use cadboss_model::Document;
+use cadboss_model::{Document, Entity, LayoutKind};
 
 use crate::document::{DxfDocument, Options};
+use crate::textgroups::survey;
 
+fn count(totals: &mut HashMap<String, u64>, entity: &Entity) {
+    let name = entity.display_type();
+    if let Some(total) = totals.get_mut(name) {
+        *total += 1;
+        return;
+    }
+    totals.insert(name.to_owned(), 1);
+}
+
+/// One walk per layout yields counts, extents and text together.
 pub(crate) fn assemble(doc: &DxfDocument) -> (Document, Report) {
     let mut report = doc.report().clone();
     let mut totals: HashMap<String, u64> = HashMap::new();
+    let survey = survey(doc, &mut |entity| count(&mut totals, entity));
     let mut layouts = doc.layouts().to_vec();
-    for layout in &mut layouts {
-        let Some(name) = layout.name.as_str() else {
+    for (layout, pass) in layouts.iter_mut().zip(survey.passes) {
+        let Some(pass) = pass else {
             continue;
         };
-        let mut decoder = doc.entities(name);
-        let mut count = 0;
-        for entity in decoder.by_ref() {
-            *totals.entry(entity.display_type().to_owned()).or_default() += 1;
-            count += 1;
-        }
-        report.merge(decoder.into_report());
-        layout.entity_count = count;
-        layout.extents = doc.layout_extents(name);
+        layout.entity_count = pass.entity_count;
+        layout.extents = pass.extents;
+        report.merge(pass.decoded);
     }
     let mut entity_counts: Vec<(String, u64)> = totals.into_iter().collect();
     entity_counts.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
@@ -46,11 +52,15 @@ pub(crate) fn assemble(doc: &DxfDocument) -> (Document, Report) {
         })
         .collect::<Vec<_>>();
 
-    let (text, text_report) = doc.text_reporting();
-    report.merge(text_report);
+    report.merge(survey.report);
 
     let mut metadata = doc.header().metadata();
-    metadata.extents = metadata.extents.or_else(|| doc.layout_extents("Model"));
+    metadata.extents = metadata.extents.or_else(|| {
+        layouts
+            .iter()
+            .find(|layout| layout.kind == LayoutKind::Model)
+            .and_then(|layout| layout.extents)
+    });
     metadata.entity_counts = entity_counts;
     metadata.layer_count = doc.layers().len() as u32;
     metadata.block_count = blocks.iter().filter(|block| !block.anonymous).count() as u32;
@@ -61,7 +71,7 @@ pub(crate) fn assemble(doc: &DxfDocument) -> (Document, Report) {
         layers: doc.layers().to_vec(),
         blocks,
         layouts,
-        text,
+        text: survey.groups,
         report: report.clone(),
     };
     (document, report)

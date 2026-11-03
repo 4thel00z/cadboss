@@ -8,44 +8,59 @@ use cadboss_model::{
     Entity, EntityKind, Layout, LayoutKind, Text, TextGroups, TextItem, TextSource,
 };
 
-use crate::document::DxfDocument;
+use crate::document::{DxfDocument, LayoutPass};
 
 const TITLE_MARKERS: [&str; 4] = ["TITLE", "TBLK", "SCHRIFTFELD", "CARTOUCHE"];
 const BOTTOM_RIGHT_SHARE: f64 = 0.25;
 
-struct Sheet<'l> {
-    layout: &'l Layout,
-    extents: Option<BBox>,
+/// An annotation waiting for its layout's extents; `titled` is set when the entity sits inside a title-block insert.
+struct Pending {
+    item: TextItem,
+    titled: bool,
 }
 
 struct Collector {
     groups: TextGroups,
+    pending: Vec<Pending>,
     links: Vec<TextItem>,
     images: Vec<TextItem>,
     defs: HashMap<u64, Text>,
     seen: HashSet<u64>,
 }
 
-pub(crate) fn collect(doc: &DxfDocument) -> (TextGroups, Report) {
+/// The text groups and one pass per layout, in `layouts()` order; `None` marks a layout whose name is not text.
+pub(crate) struct Survey {
+    pub(crate) groups: TextGroups,
+    pub(crate) report: Report,
+    pub(crate) passes: Vec<Option<LayoutPass>>,
+}
+
+/// Walks every layout once, collecting text and handing each top-level entity to `top`.
+/// Annotations are placed in the title block when they sit in a title-block insert or in the bottom-right quarter of their paper layout's extents from the same walk.
+pub(crate) fn survey(doc: &DxfDocument, top: &mut dyn FnMut(&Entity)) -> Survey {
     let mut report = Report::default();
     let defs = doc.image_defs(&mut report);
     let mut collector = Collector {
         groups: TextGroups::default(),
+        pending: Vec::new(),
         links: Vec::new(),
         images: Vec::new(),
         defs: defs.iter().cloned().collect(),
         seen: HashSet::new(),
     };
+    let mut passes = Vec::with_capacity(doc.layouts().len());
     for layout in doc.layouts() {
         let Some(name) = layout.name.as_str() else {
             report.note(SkipKind::Object, SkipReason::Unsupported);
+            passes.push(None);
             continue;
         };
-        let extents = paper_extents(doc, layout, name);
-        let sheet = Sheet { layout, extents };
-        report.merge(doc.walk_with_path(name, &mut |entity, transform, path| {
-            collector.visit(&sheet, entity, transform, path);
-        }));
+        let mut pass = doc.pass(name, top, &mut |entity, transform, path| {
+            collector.visit(layout, entity, transform, path);
+        });
+        collector.settle(paper_extents(layout, pass.extents));
+        report.merge(std::mem::take(&mut pass.walked));
+        passes.push(Some(pass));
     }
     let mut groups = collector.finish(doc, &defs);
     let tabs = tab_map(doc.layouts());
@@ -53,12 +68,16 @@ pub(crate) fn collect(doc: &DxfDocument) -> (TextGroups, Report) {
     groups.annotations = rank(groups.annotations, &tabs);
     groups.attributes = rank(groups.attributes, &tabs);
     groups.references = rank(groups.references, &tabs);
-    (groups, report)
+    Survey {
+        groups,
+        report,
+        passes,
+    }
 }
 
 impl Collector {
-    fn visit(&mut self, sheet: &Sheet, entity: &Entity, transform: &Transform, path: &[Text]) {
-        self.hyperlink(sheet, entity, transform);
+    fn visit(&mut self, layout: &Layout, entity: &Entity, transform: &Transform, path: &[Text]) {
+        self.hyperlink(layout, entity, transform);
         match &entity.kind {
             EntityKind::Text {
                 text,
@@ -72,7 +91,7 @@ impl Collector {
                 height,
                 ..
             } => self.annotation(
-                sheet,
+                layout,
                 entity,
                 path,
                 (text.clone(), TextSource::Annotation),
@@ -91,7 +110,7 @@ impl Collector {
                     return;
                 };
                 self.annotation(
-                    sheet,
+                    layout,
                     entity,
                     path,
                     (text, TextSource::Dimension),
@@ -102,7 +121,7 @@ impl Collector {
                 text: Some(text),
                 points,
             } => self.annotation(
-                sheet,
+                layout,
                 entity,
                 path,
                 (text.clone(), TextSource::Leader),
@@ -118,7 +137,7 @@ impl Collector {
                         )),
                         source: TextSource::Attribute,
                         layer: entity.common.layer.clone(),
-                        layout: sheet.layout.name.clone(),
+                        layout: layout.name.clone(),
                         position: Some(transform.apply(attribute.position)),
                         height: Some(attribute.height * transform.scale_factor()),
                     });
@@ -139,7 +158,7 @@ impl Collector {
                     text: path.clone(),
                     source: TextSource::ImagePath,
                     layer: entity.common.layer.clone(),
-                    layout: sheet.layout.name.clone(),
+                    layout: layout.name.clone(),
                     position: Some(transform.apply(*position)),
                     height: None,
                 });
@@ -148,7 +167,7 @@ impl Collector {
         }
     }
 
-    fn hyperlink(&mut self, sheet: &Sheet, entity: &Entity, transform: &Transform) {
+    fn hyperlink(&mut self, layout: &Layout, entity: &Entity, transform: &Transform) {
         let Some(url) = &entity.common.hyperlink else {
             return;
         };
@@ -156,7 +175,7 @@ impl Collector {
             text: url.clone(),
             source: TextSource::Hyperlink,
             layer: entity.common.layer.clone(),
-            layout: sheet.layout.name.clone(),
+            layout: layout.name.clone(),
             position: anchor(entity).map(|point| transform.apply(point)),
             height: None,
         });
@@ -164,7 +183,7 @@ impl Collector {
 
     fn annotation(
         &mut self,
-        sheet: &Sheet,
+        layout: &Layout,
         entity: &Entity,
         path: &[Text],
         (text, source): (Text, TextSource),
@@ -173,19 +192,27 @@ impl Collector {
         if text.is_empty() {
             return;
         }
-        let item = TextItem {
-            text,
-            source,
-            layer: entity.common.layer.clone(),
-            layout: sheet.layout.name.clone(),
-            position,
-            height,
-        };
-        if in_title_block(path) || bottom_right(sheet.extents, position) {
-            self.groups.title_block.push(item);
-            return;
+        self.pending.push(Pending {
+            item: TextItem {
+                text,
+                source,
+                layer: entity.common.layer.clone(),
+                layout: layout.name.clone(),
+                position,
+                height,
+            },
+            titled: in_title_block(path),
+        });
+    }
+
+    fn settle(&mut self, extents: Option<BBox>) {
+        for pending in self.pending.drain(..) {
+            if pending.titled || bottom_right(extents, pending.item.position) {
+                self.groups.title_block.push(pending.item);
+                continue;
+            }
+            self.groups.annotations.push(pending.item);
         }
-        self.groups.annotations.push(item);
     }
 
     fn finish(mut self, doc: &DxfDocument, defs: &[(u64, Text)]) -> TextGroups {
@@ -220,17 +247,14 @@ impl Collector {
     }
 }
 
-fn paper_extents(doc: &DxfDocument, layout: &Layout, name: &str) -> Option<BBox> {
-    if layout.kind != LayoutKind::Paper {
-        return None;
-    }
-    doc.layout_extents(name)
+fn paper_extents(layout: &Layout, extents: Option<BBox>) -> Option<BBox> {
+    extents.filter(|_| layout.kind == LayoutKind::Paper)
 }
 
 fn tab_map(layouts: &[Layout]) -> HashMap<Vec<u8>, usize> {
     let mut tabs = HashMap::new();
     for (index, layout) in layouts.iter().enumerate() {
-        tabs.entry(bytes(&layout.name).to_vec()).or_insert(index);
+        tabs.entry(layout.name.as_bytes().to_vec()).or_insert(index);
     }
     tabs
 }
@@ -300,19 +324,12 @@ fn dimension_text(text: &Text, measurement: Option<f64>) -> Option<Text> {
     Some(Text::from(shown)).filter(|text| !display(text).trim().is_empty())
 }
 
-fn bytes(text: &Text) -> &[u8] {
-    match text {
-        Text::Str(text) => text.as_bytes(),
-        Text::Bytes(bytes) => bytes,
-    }
-}
-
 fn compare(first: &(usize, TextItem), second: &(usize, TextItem)) -> Ordering {
     match (first.1.position, second.1.position) {
         (Some(a), Some(b)) => first
             .0
             .cmp(&second.0)
-            .then_with(|| bytes(&first.1.layer).cmp(bytes(&second.1.layer)))
+            .then_with(|| first.1.layer.as_bytes().cmp(second.1.layer.as_bytes()))
             .then_with(|| b.y.total_cmp(&a.y))
             .then_with(|| a.x.total_cmp(&b.x)),
         (Some(_), None) => Ordering::Less,
@@ -326,7 +343,9 @@ fn rank(items: Vec<TextItem>, tabs: &HashMap<Vec<u8>, usize>) -> Vec<TextItem> {
         .into_iter()
         .map(|item| {
             (
-                tabs.get(bytes(&item.layout)).copied().unwrap_or(usize::MAX),
+                tabs.get(item.layout.as_bytes())
+                    .copied()
+                    .unwrap_or(usize::MAX),
                 item,
             )
         })

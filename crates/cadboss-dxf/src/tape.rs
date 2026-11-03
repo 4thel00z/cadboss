@@ -174,6 +174,10 @@ impl<'t> Cursor<'t> {
         self.index
     }
 
+    pub(crate) fn seek(&mut self, index: u32) {
+        self.index = index.min(self.end);
+    }
+
     pub(crate) fn tape(&self) -> &'t Tape {
         self.tape
     }
