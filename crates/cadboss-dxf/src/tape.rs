@@ -170,13 +170,7 @@ impl<'t> Cursor<'t> {
     }
 
     fn advance(&mut self) -> Option<(i16, &'t [u8])> {
-        if self.index >= self.end {
-            return None;
-        }
-        let item = (
-            self.tape.code(self.index),
-            self.tape.value(self.index, self.bytes),
-        );
+        let item = self.peek()?;
         self.index += 1;
         Some(item)
     }

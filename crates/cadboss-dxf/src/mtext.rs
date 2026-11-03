@@ -1,62 +1,72 @@
 //! MTEXT formatting-code removal.
 
-use std::iter::Peekable;
-use std::str::Chars;
+use crate::codepage::{backslash_escape, unescape_percent};
 
-use crate::codepage::unescape;
-
-const ARGUMENT_COMMANDS: &str = "fFHhCcWwQqAaTt";
+const ARGUMENT_COMMANDS: &str = "fFHhCcWwQqAaTtp";
 const TOGGLE_COMMANDS: &str = "LlOoKk";
+const ARGUMENT_END: [char; 4] = [';', '\\', '{', '}'];
 const NON_BREAKING_SPACE: char = '\u{a0}';
 
-/// Removes braces and formatting commands from MTEXT contents, renders stacked fractions as `a/b`, then expands text escapes.
+/// Removes braces and formatting commands from MTEXT contents and renders stacked fractions as `a/b`.
+/// Backslash escapes are resolved here once, so an escaped backslash is never rescanned; percent codes are expanded last.
 pub fn strip_mtext(raw: &str) -> String {
     let mut out = String::with_capacity(raw.len());
-    let mut chars = raw.chars().peekable();
-    while let Some(next) = chars.next() {
-        match next {
-            '{' | '}' => {}
-            '\\' => command(&mut chars, &mut out),
-            other => out.push(other),
+    let mut rest = raw;
+    while let Some(next) = rest.chars().next() {
+        if next == '\\' {
+            rest = command(rest, &mut out);
+            continue;
         }
+        if !matches!(next, '{' | '}') {
+            out.push(next);
+        }
+        rest = rest.get(next.len_utf8()..).unwrap_or("");
     }
-    unescape(&out)
+    unescape_percent(&out)
 }
 
-fn command(chars: &mut Peekable<Chars>, out: &mut String) {
-    let Some(letter) = chars.next() else {
+fn command<'a>(rest: &'a str, out: &mut String) -> &'a str {
+    if let Some((replacement, used)) = backslash_escape(rest) {
+        out.extend(replacement);
+        return rest.get(used..).unwrap_or("");
+    }
+    let Some(letter) = rest.get(1..).and_then(|after| after.chars().next()) else {
         out.push('\\');
-        return;
+        return "";
     };
+    let after = rest.get(1 + letter.len_utf8()..).unwrap_or("");
     match letter {
         '\\' | '{' | '}' => out.push(letter),
         'P' => out.push('\n'),
         '~' => out.push(NON_BREAKING_SPACE),
-        'S' => stack(&argument(chars), out),
+        'S' => {
+            let (argument, remaining) = argument(after);
+            stack(argument, out);
+            return remaining;
+        }
         toggle if TOGGLE_COMMANDS.contains(toggle) => {}
         with_argument if ARGUMENT_COMMANDS.contains(with_argument) => {
-            argument(chars);
+            return argument(after).1;
         }
         other => {
             out.push('\\');
             out.push(other);
         }
     }
+    after
 }
 
-fn argument(chars: &mut Peekable<Chars>) -> String {
-    let mut argument = String::new();
-    while let Some(&next) = chars.peek() {
-        if next == '\\' {
-            break;
-        }
-        chars.next();
-        if next == ';' {
-            break;
-        }
-        argument.push(next);
-    }
-    argument
+fn argument(after: &str) -> (&str, &str) {
+    let Some(end) = after.find(ARGUMENT_END) else {
+        return (after, "");
+    };
+    let argument = after.get(..end).unwrap_or("");
+    let skip = if after.get(end..).is_some_and(|tail| tail.starts_with(';')) {
+        end + 1
+    } else {
+        end
+    };
+    (argument, after.get(skip..).unwrap_or(""))
 }
 
 fn stack(argument: &str, out: &mut String) {
@@ -111,5 +121,23 @@ mod tests {
     #[test]
     fn unicode_escapes_pass_through_to_unescape() {
         assert_eq!(strip_mtext("\\U+00B0"), "\u{b0}");
+    }
+
+    #[test]
+    fn paragraph_codes_are_removed() {
+        assert_eq!(strip_mtext("\\pxqc;Title"), "Title");
+        assert_eq!(strip_mtext("\\pi-3,l3;Item"), "Item");
+    }
+
+    #[test]
+    fn escaped_backslash_is_not_rescanned_as_a_unicode_escape() {
+        assert_eq!(strip_mtext("\\\\U+00B0"), "\\U+00B0");
+        assert_eq!(strip_mtext("\\U+00B0"), "\u{b0}");
+    }
+
+    #[test]
+    fn unterminated_argument_stops_at_a_closing_brace() {
+        assert_eq!(strip_mtext("{\\fArial Hello}world"), "world");
+        assert_eq!(strip_mtext("{\\fArial|b1;Hello}world"), "Helloworld");
     }
 }

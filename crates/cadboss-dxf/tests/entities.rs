@@ -14,11 +14,18 @@ macro_rules! variant {
 }
 
 fn decode_with(bytes: &[u8], budget: &Budget) -> Result<(Vec<Entity>, Report), Error> {
+    decode_laid_out(bytes, budget, &|_, _| Text::from("Model"))
+}
+
+fn decode_laid_out(
+    bytes: &[u8],
+    budget: &Budget,
+    layout: &dyn Fn(Option<u64>, bool) -> Text,
+) -> Result<(Vec<Entity>, Report), Error> {
     let (tape, _) = Tape::lex(bytes, &Budget::default())?;
     let section = tape.section(SectionName::Entities).ok_or(Error::Empty)?;
     let cursor = cadboss_dxf::Cursor::new(&tape, bytes, section.start..section.end);
-    let layout = |_: Option<u64>, _: bool| Text::from("Model");
-    let mut decoder = EntityDecoder::new(cursor, Codepage::Utf8, budget, &layout);
+    let mut decoder = EntityDecoder::new(cursor, Codepage::Utf8, budget, layout);
     let entities: Vec<Entity> = decoder.by_ref().collect();
     Ok((entities, decoder.into_report()))
 }
@@ -273,4 +280,307 @@ fn polyline_collects_vertices_until_seqend() {
             closed: true
         }
     );
+}
+
+fn only(report: &Report, kind: SkipKind, reason: SkipReason, count: u64) -> bool {
+    report.skipped
+        == vec![Skipped {
+            kind,
+            reason,
+            count,
+        }]
+}
+
+#[test]
+fn reactor_group_does_not_leak_into_the_owner_handle() {
+    let bytes = DxfBuilder::new()
+        .raw(0, "LINE")
+        .raw(5, "1A")
+        .raw(102, "{ACAD_REACTORS")
+        .raw(330, "AB")
+        .raw(102, "}")
+        .raw(330, "1F")
+        .raw(67, "1")
+        .raw(10, "0.0")
+        .raw(20, "0.0")
+        .raw(11, "1.0")
+        .raw(21, "1.0")
+        .build();
+    let seen = std::cell::RefCell::new(Vec::new());
+    let layout = |owner: Option<u64>, paper: bool| {
+        seen.borrow_mut().push((owner, paper));
+        Text::from("Layout1")
+    };
+    let (entities, _) = decode_laid_out(&bytes, &Budget::default(), &layout).unwrap();
+    assert_eq!(entities.len(), 1);
+    assert_eq!(entities[0].common.handle, Some(0x1A));
+    assert_eq!(*seen.borrow(), vec![(Some(0x1F), true)]);
+}
+
+#[test]
+fn text_value_cut_at_the_limit_reports_once_and_keeps_the_limit_length() {
+    let bytes = DxfBuilder::new()
+        .mtext(&"x".repeat(300), (0.0, 0.0), 2.5)
+        .build();
+    let budget = Budget {
+        max_string_bytes: 18,
+        ..Budget::default()
+    };
+    let (entities, report) = decode_with(&bytes, &budget).unwrap();
+    let text = variant!(entities[0], EntityKind::MText { text, .. } => text);
+    assert_eq!(text, &Text::from("x".repeat(18)));
+    assert!(only(&report, SkipKind::Text, SkipReason::StringLimit, 1));
+}
+
+#[test]
+fn multibyte_text_is_cut_on_a_character_boundary() {
+    let bytes = DxfBuilder::new()
+        .text("\u{e9}\u{e9}\u{e9}", (0.0, 0.0), 2.5)
+        .build();
+    let budget = Budget {
+        max_string_bytes: 3,
+        ..Budget::default()
+    };
+    let (entities, report) = decode_with(&bytes, &budget).unwrap();
+    let text = variant!(entities[0], EntityKind::Text { text, .. } => text);
+    assert_eq!(text, &Text::from("\u{e9}"));
+    assert!(only(&report, SkipKind::Text, SkipReason::StringLimit, 1));
+}
+
+#[test]
+fn unknown_type_name_goes_through_the_string_limit() {
+    let bytes = DxfBuilder::new().raw(0, "ABCDEFGHIJKL").build();
+    let budget = Budget {
+        max_string_bytes: 4,
+        ..Budget::default()
+    };
+    let (entities, _) = decode_with(&bytes, &budget).unwrap();
+    let name = variant!(entities[0], EntityKind::Unknown { type_name } => type_name);
+    assert_eq!(name, &Text::from("ABCD"));
+}
+
+#[test]
+fn bad_vertex_coordinate_drops_that_vertex_only() {
+    let bytes = DxfBuilder::new()
+        .raw(0, "LWPOLYLINE")
+        .raw(42, "0.9")
+        .raw(10, "0.0")
+        .raw(20, "0.0")
+        .raw(10, "oops")
+        .raw(20, "5.0")
+        .raw(42, "0.7")
+        .raw(10, "2.0")
+        .raw(20, "3.0")
+        .raw(42, "0.25")
+        .build();
+    let (entities, report) = decode_all(&bytes).unwrap();
+    let (points, bulges) =
+        variant!(entities[0], EntityKind::Polyline { points, bulges, .. } => (points, bulges));
+    assert_eq!(points, &vec![Point::xy(0.0, 0.0), Point::xy(2.0, 3.0)]);
+    assert_eq!(bulges, &vec![0.0, 0.25]);
+    assert!(only(&report, SkipKind::Entity, SkipReason::Malformed, 1));
+}
+
+#[test]
+fn stray_vertex_attrib_and_seqend_are_reported_as_malformed() {
+    let bytes = DxfBuilder::new()
+        .raw(0, "VERTEX")
+        .raw(0, "ATTRIB")
+        .raw(0, "SEQEND")
+        .circle((0.0, 0.0), 1.0)
+        .build();
+    let (entities, report) = decode_all(&bytes).unwrap();
+    assert_eq!(entities.len(), 1);
+    assert!(only(&report, SkipKind::Entity, SkipReason::Malformed, 3));
+}
+
+#[test]
+fn attribs_attach_without_the_attribs_follow_flag() {
+    let bytes = DxfBuilder::new()
+        .raw(0, "INSERT")
+        .raw(2, "B")
+        .raw(10, "0.0")
+        .raw(20, "0.0")
+        .raw(0, "ATTRIB")
+        .raw(2, "TAG")
+        .raw(1, "value")
+        .raw(0, "SEQEND")
+        .build();
+    let (entities, _) = decode_all(&bytes).unwrap();
+    let attributes = variant!(entities[0], EntityKind::Insert { attributes, .. } => attributes);
+    assert_eq!(attributes.len(), 1);
+}
+
+#[test]
+fn ellipse_spline_hatch_and_point_decode_their_fields() {
+    let bytes = DxfBuilder::new()
+        .raw(0, "ELLIPSE")
+        .raw(10, "1.0")
+        .raw(20, "2.0")
+        .raw(11, "3.0")
+        .raw(21, "0.0")
+        .raw(40, "0.5")
+        .raw(0, "SPLINE")
+        .raw(70, "1")
+        .raw(71, "2")
+        .raw(10, "0.0")
+        .raw(20, "0.0")
+        .raw(10, "1.0")
+        .raw(20, "1.0")
+        .raw(11, "0.5")
+        .raw(21, "0.5")
+        .raw(0, "HATCH")
+        .raw(2, "SOLID")
+        .raw(70, "1")
+        .raw(91, "2")
+        .raw(0, "POINT")
+        .raw(10, "7.0")
+        .raw(20, "8.0")
+        .build();
+    let (entities, report) = decode_all(&bytes).unwrap();
+    assert!(report.is_empty());
+    assert_eq!(
+        entities[0].kind,
+        EntityKind::Ellipse {
+            center: Point::xy(1.0, 2.0),
+            major: Point::xy(3.0, 0.0),
+            ratio: 0.5,
+            start: 0.0,
+            end: std::f64::consts::TAU
+        }
+    );
+    assert_eq!(
+        entities[1].kind,
+        EntityKind::Spline {
+            control: vec![Point::xy(0.0, 0.0), Point::xy(1.0, 1.0)],
+            fit: vec![Point::xy(0.5, 0.5)],
+            degree: 2,
+            closed: true
+        }
+    );
+    assert_eq!(
+        entities[2].kind,
+        EntityKind::Hatch {
+            pattern: Text::from("SOLID"),
+            solid: true,
+            loops: 2
+        }
+    );
+    assert_eq!(
+        entities[3].kind,
+        EntityKind::Point {
+            position: Point::xy(7.0, 8.0)
+        }
+    );
+}
+
+#[test]
+fn solid_image_and_viewport_decode_their_fields() {
+    let bytes = DxfBuilder::new()
+        .raw(0, "SOLID")
+        .raw(10, "0.0")
+        .raw(20, "0.0")
+        .raw(11, "1.0")
+        .raw(21, "0.0")
+        .raw(12, "0.0")
+        .raw(22, "1.0")
+        .raw(13, "1.0")
+        .raw(23, "1.0")
+        .raw(0, "IMAGE")
+        .raw(10, "5.0")
+        .raw(20, "6.0")
+        .raw(13, "640.0")
+        .raw(23, "480.0")
+        .raw(340, "2b")
+        .raw(0, "VIEWPORT")
+        .raw(10, "1.0")
+        .raw(20, "2.0")
+        .raw(40, "10.0")
+        .raw(41, "5.0")
+        .raw(12, "3.0")
+        .raw(22, "4.0")
+        .raw(45, "20.0")
+        .raw(331, "0a")
+        .raw(331, "FF")
+        .build();
+    let (entities, report) = decode_all(&bytes).unwrap();
+    assert!(report.is_empty());
+    let points = variant!(entities[0], EntityKind::Solid { points } => points);
+    assert_eq!(points.len(), 4);
+    assert_eq!(
+        entities[1].kind,
+        EntityKind::Image {
+            path: None,
+            image_def: Some(0x2B),
+            position: Point::xy(5.0, 6.0),
+            size: Point::xy(640.0, 480.0)
+        }
+    );
+    assert_eq!(
+        entities[2].kind,
+        EntityKind::Viewport {
+            center: Point::xy(1.0, 2.0),
+            width: 10.0,
+            height: 5.0,
+            view_center: Point::xy(3.0, 4.0),
+            view_height: 20.0,
+            frozen_layers: vec![Text::from("A"), Text::from("FF")]
+        }
+    );
+}
+
+#[test]
+fn dimension_type_is_masked_to_its_low_nibble() {
+    let bytes = DxfBuilder::new().raw(0, "DIMENSION").raw(70, "33").build();
+    let (entities, _) = decode_all(&bytes).unwrap();
+    let dim_type = variant!(entities[0], EntityKind::Dimension { dim_type, .. } => *dim_type);
+    assert_eq!(dim_type, 1);
+}
+
+#[test]
+fn polyline_without_seqend_does_not_swallow_the_next_entity() {
+    let bytes = DxfBuilder::new()
+        .raw(0, "POLYLINE")
+        .raw(0, "VERTEX")
+        .raw(10, "1.0")
+        .raw(20, "1.0")
+        .raw(0, "LINE")
+        .raw(10, "0.0")
+        .raw(20, "0.0")
+        .raw(11, "1.0")
+        .raw(21, "1.0")
+        .build();
+    let (entities, _) = decode_all(&bytes).unwrap();
+    assert_eq!(entities.len(), 2);
+    assert!(matches!(entities[1].kind, EntityKind::Line { .. }));
+}
+
+#[test]
+fn insert_announcing_attribs_without_any_keeps_the_next_line() {
+    let bytes = DxfBuilder::new()
+        .raw(0, "INSERT")
+        .raw(66, "1")
+        .raw(2, "B")
+        .raw(10, "0.0")
+        .raw(20, "0.0")
+        .line((0.0, 0.0), (1.0, 1.0))
+        .build();
+    let (entities, report) = decode_all(&bytes).unwrap();
+    assert!(report.is_empty());
+    assert_eq!(entities.len(), 2);
+    assert!(matches!(entities[1].kind, EntityKind::Line { .. }));
+}
+
+#[test]
+fn mtext_with_only_chunk_codes_still_decodes() {
+    let bytes = DxfBuilder::new()
+        .raw(0, "MTEXT")
+        .raw(10, "0.0")
+        .raw(20, "0.0")
+        .raw(3, "abc")
+        .raw(3, "def")
+        .build();
+    let (entities, _) = decode_all(&bytes).unwrap();
+    let text = variant!(entities[0], EntityKind::MText { text, .. } => text);
+    assert_eq!(text, &Text::from("abcdef"));
 }

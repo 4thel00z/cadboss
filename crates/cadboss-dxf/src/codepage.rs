@@ -88,6 +88,16 @@ fn windows_1252(byte: u8) -> char {
 }
 
 pub fn unescape(s: &str) -> String {
+    expand(s, |rest| {
+        backslash_escape(rest).or_else(|| percent_escape(rest))
+    })
+}
+
+pub(crate) fn unescape_percent(s: &str) -> String {
+    expand(s, percent_escape)
+}
+
+fn expand(s: &str, escape: impl Fn(&str) -> Option<(Option<char>, usize)>) -> String {
     let mut out = String::with_capacity(s.len());
     let mut rest = s;
     while let Some(next) = rest.chars().next() {
@@ -102,9 +112,8 @@ pub fn unescape(s: &str) -> String {
     out
 }
 
-fn escape(rest: &str) -> Option<(Option<char>, usize)> {
-    let bytes = rest.as_bytes();
-    match *bytes {
+pub(crate) fn backslash_escape(rest: &str) -> Option<(Option<char>, usize)> {
+    match *rest.as_bytes() {
         [b'\\', marker, b'+', ..] if marker.eq_ignore_ascii_case(&b'U') => {
             let code = hex4(rest.get(3..7))?;
             Some((Some(char::from_u32(code).unwrap_or('\u{fffd}')), 7))
@@ -115,6 +124,12 @@ fn escape(rest: &str) -> Option<(Option<char>, usize)> {
             hex4(rest.get(4..8))?;
             Some((Some('\u{fffd}'), 8))
         }
+        _ => None,
+    }
+}
+
+fn percent_escape(rest: &str) -> Option<(Option<char>, usize)> {
+    match *rest.as_bytes() {
         [b'%', b'%', code, ..] => percent(rest, code),
         _ => None,
     }
