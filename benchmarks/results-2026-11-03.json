@@ -1,0 +1,16 @@
+{
+  "benchmark": "text",
+  "entities": 1700000,
+  "input_bytes": 300589943,
+  "peak_rss_bytes": 548814848,
+  "anonymous_bytes": 248224905,
+  "anonymous_ratio": 0.826,
+  "rss_ratio": 1.826,
+  "seconds": 2.3,
+  "hardware": {
+    "os": "Darwin 27.0.0",
+    "arch": "arm64",
+    "cpu": "Apple M3 Pro",
+    "memory_bytes": 38654705664
+  }
+}

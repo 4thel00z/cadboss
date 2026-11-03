@@ -17,3 +17,8 @@ memchr = { workspace = true }
 
 [dev-dependencies]
 cadboss-testkit = { path = "../cadboss-testkit" }
+criterion = { workspace = true }
+
+[[bench]]
+name = "dxf"
+harness = false

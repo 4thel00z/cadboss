@@ -47,8 +47,14 @@ bench: ## Run benchmarks
 samples: ## Fetch sample drawings (not yet implemented)
 	@echo "not yet"
 
-fuzz: ## Run fuzz targets (not yet implemented)
-	@echo "not yet"
+FUZZ_SECONDS ?= 60
+
+fuzz: ## Run the DXF fuzz target (FUZZ_SECONDS, default 60); skips without nightly and cargo-fuzz
+	@if rustup toolchain list | grep -q nightly && cargo fuzz --version >/dev/null 2>&1; then \
+		cargo +nightly fuzz run dxf_load -- -max_total_time=$(FUZZ_SECONDS); \
+	else \
+		echo "fuzz skipped: needs a nightly toolchain and cargo-fuzz"; \
+	fi
 
 ##@ Help
 
