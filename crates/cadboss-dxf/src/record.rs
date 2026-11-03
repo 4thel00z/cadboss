@@ -20,6 +20,14 @@ pub(crate) fn first<'t>(pairs: &[Pair<'t>], code: i16) -> Option<&'t [u8]> {
         .map(|(_, value)| *value)
 }
 
+pub(crate) fn last<'t>(pairs: &[Pair<'t>], code: i16) -> Option<&'t [u8]> {
+    pairs
+        .iter()
+        .rev()
+        .find(|(candidate, _)| *candidate == code)
+        .map(|(_, value)| *value)
+}
+
 /// Drops every pair inside a `102 {` ... `102 }` group, the markers included.
 pub(crate) fn without_groups(pairs: Vec<Pair<'_>>) -> Vec<Pair<'_>> {
     let mut depth = 0u32;

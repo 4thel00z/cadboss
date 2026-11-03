@@ -34,6 +34,7 @@ pub struct EntityDecoder<'t> {
     decoded: u64,
     report: Report,
     done: bool,
+    layout_filter: Option<Text>,
 }
 
 impl<'t> EntityDecoder<'t> {
@@ -51,7 +52,14 @@ impl<'t> EntityDecoder<'t> {
             decoded: 0,
             report: Report::default(),
             done: false,
+            layout_filter: None,
         }
+    }
+
+    /// Skips entities whose resolved layout differs from `name`; skipped entities do not count toward the budget.
+    pub fn only_layout(mut self, name: Text) -> EntityDecoder<'t> {
+        self.layout_filter = Some(name);
+        self
     }
 
     pub fn report(&self) -> &Report {
@@ -137,6 +145,13 @@ impl<'t> Iterator for EntityDecoder<'t> {
             let Some(entity) = self.decode_record(name) else {
                 continue;
             };
+            if self
+                .layout_filter
+                .as_ref()
+                .is_some_and(|filter| *filter != entity.common.layout)
+            {
+                continue;
+            }
             self.decoded += 1;
             return Some(entity);
         }
