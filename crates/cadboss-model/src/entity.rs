@@ -11,6 +11,7 @@ pub struct EntityCommon {
     pub layer: Text,
     pub layout: Text,
     pub color: i16,
+    pub hyperlink: Option<Text>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -247,6 +248,7 @@ mod tests {
                 layer: "0".into(),
                 layout: "Model".into(),
                 color: 256,
+                hyperlink: None,
             },
             kind,
         }

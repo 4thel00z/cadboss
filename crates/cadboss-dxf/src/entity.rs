@@ -325,6 +325,21 @@ impl<'a, 't> Fields<'a, 't> {
         self.finish(text, cut)
     }
 
+    fn hyperlink(&mut self) -> Option<Text> {
+        let start = self
+            .pairs
+            .iter()
+            .position(|(code, value)| *code == 1001 && *value == b"PE_URL")?;
+        let raw = self
+            .pairs
+            .iter()
+            .skip(start + 1)
+            .take_while(|(code, _)| *code != 1001)
+            .find(|(code, _)| *code == 1000)
+            .map(|(_, value)| *value)?;
+        Some(self.string(raw, false))
+    }
+
     fn common(&mut self, layout_of: LayoutOf) -> EntityCommon {
         let owner = self.handle(330);
         let paper = self.int(67) == Some(1);
@@ -336,6 +351,7 @@ impl<'a, 't> Fields<'a, 't> {
                 .int(62)
                 .and_then(|color| i16::try_from(color).ok())
                 .unwrap_or(BY_LAYER),
+            hyperlink: self.hyperlink(),
         }
     }
 }

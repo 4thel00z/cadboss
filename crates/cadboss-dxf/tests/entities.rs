@@ -584,3 +584,18 @@ fn mtext_with_only_chunk_codes_still_decodes() {
     let text = variant!(entities[0], EntityKind::MText { text, .. } => text);
     assert_eq!(text, &Text::from("abcdef"));
 }
+
+#[test]
+fn hyperlink_xdata_is_kept_on_the_entity() {
+    let bytes = DxfBuilder::new()
+        .text("Spec", (0.0, 0.0), 2.5)
+        .hyperlink("https://example.com/spec")
+        .line((0.0, 0.0), (1.0, 1.0))
+        .build();
+    let (entities, _) = decode_all(&bytes).unwrap();
+    assert_eq!(
+        entities[0].common.hyperlink,
+        Some(Text::from("https://example.com/spec"))
+    );
+    assert_eq!(entities[1].common.hyperlink, None);
+}
