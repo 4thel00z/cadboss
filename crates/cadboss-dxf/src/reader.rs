@@ -54,7 +54,7 @@ pub(crate) fn assemble(doc: &DxfDocument) -> (Document, Report) {
     metadata.extents = metadata.extents.or_else(|| doc.layout_extents("Model"));
     metadata.entity_counts = entity_counts;
     metadata.layer_count = doc.layers().len() as u32;
-    metadata.block_count = blocks.len() as u32;
+    metadata.block_count = blocks.iter().filter(|block| !block.anonymous).count() as u32;
     metadata.layout_count = layouts.len() as u32;
 
     let document = Document {

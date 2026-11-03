@@ -5,7 +5,7 @@
 - Format: DXF AC1027
 - Units: Millimeters
 - Layers: 2
-- Blocks: 3
+- Blocks: 1
 - Layouts: 2
 - Extents: (0, 0) to (65, 40)
 - Created: 2024-03-02

@@ -107,12 +107,16 @@ impl Report {
         self.skipped.is_empty() && self.unlisted == 0
     }
 
-    pub fn summary(&self) -> String {
-        let mut parts: Vec<String> = self.skipped.iter().map(Skipped::describe).collect();
+    pub fn lines(&self) -> Vec<String> {
+        let mut lines: Vec<String> = self.skipped.iter().map(Skipped::describe).collect();
         if self.unlisted > 0 {
-            parts.push(format!("{} more skipped (unlisted)", self.unlisted));
+            lines.push(format!("{} more skipped (unlisted)", self.unlisted));
         }
-        parts.join(", ")
+        lines
+    }
+
+    pub fn summary(&self) -> String {
+        self.lines().join(", ")
     }
 
     fn add(&mut self, kind: SkipKind, reason: SkipReason, count: u64) {

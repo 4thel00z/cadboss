@@ -9,7 +9,7 @@ pub fn to_markdown(doc: &Document, title: &str) -> String {
             .flat_map(|layout| layout_blocks(doc, layout)),
     );
     blocks.extend(entities(doc));
-    blocks.push(section("Names", &doc.text.names));
+    blocks.extend(optional_section("Names", &doc.text.names));
     blocks.extend(optional_section("Attributes", &doc.text.attributes));
     blocks.extend(optional_section("References", &doc.text.references));
     blocks.extend(report(doc));
@@ -88,7 +88,8 @@ fn layer_groups(annotations: &[&TextItem]) -> Vec<String> {
             let items = annotations
                 .iter()
                 .filter(|item| item.layer == first.layer)
-                .map(|item| annotation(item));
+                .copied()
+                .map(annotation);
             bullets(&heading, items)
         })
         .collect()
@@ -139,8 +140,7 @@ fn report(doc: &Document) -> Option<String> {
     if doc.report.is_empty() {
         return None;
     }
-    let summary = doc.report.summary();
-    Some(bullets("## Report", summary.split(", ").map(str::to_owned)))
+    Some(bullets("## Report", doc.report.lines().into_iter()))
 }
 
 fn bullets(heading: &str, items: impl Iterator<Item = String>) -> String {

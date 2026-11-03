@@ -20,7 +20,11 @@ fn document_counts_entities_per_type() -> Result<(), Error> {
     );
     assert_eq!(
         document.metadata.block_count as usize,
-        document.blocks.len()
+        document
+            .blocks
+            .iter()
+            .filter(|block| !block.anonymous)
+            .count()
     );
     Ok(())
 }
