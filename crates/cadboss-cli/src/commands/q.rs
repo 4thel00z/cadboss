@@ -35,6 +35,33 @@ fn render(value: &Val, raw: bool) -> Vec<u8> {
     pretty.unwrap_or(compact).into_bytes()
 }
 
+fn near(rest: &str) -> String {
+    match rest.trim() {
+        "" => "end of program".to_owned(),
+        text => format!("near '{}'", text.chars().take(24).collect::<String>()),
+    }
+}
+
+fn load_message(error: &jaq_core::load::Error<&str>) -> String {
+    match error {
+        jaq_core::load::Error::Io(entries) => entries
+            .first()
+            .map_or_else(|| "unreadable module".to_owned(), |(_, text)| text.clone()),
+        jaq_core::load::Error::Lex(entries) => entries.first().map_or_else(
+            || "syntax error".to_owned(),
+            |(_, rest)| format!("syntax error {}", near(rest)),
+        ),
+        jaq_core::load::Error::Parse(entries) => entries.first().map_or_else(
+            || "syntax error".to_owned(),
+            |(expected, rest)| format!("expected {} {}", expected.as_str(), near(rest)),
+        ),
+    }
+}
+
+fn invalid(message: String) -> Failure {
+    Failure::usage(format!("invalid jq program: {message}"))
+}
+
 pub fn run(args: &QArgs, doc: &DxfDocument, out: &mut dyn Write) -> Result<Report, Failure> {
     let (value, report) = build(doc, args.entities, args.layout.as_deref())?;
     let text = serde_json::to_string(&value)?;
@@ -51,13 +78,26 @@ pub fn run(args: &QArgs, doc: &DxfDocument, out: &mut dyn Write) -> Result<Repor
         code: args.program.as_str(),
         path: (),
     };
-    let modules = Loader::new(defs)
-        .load(&arena, program)
-        .map_err(|errors| Failure::usage(format!("invalid jq program: {errors:?}")))?;
+    let modules = Loader::new(defs).load(&arena, program).map_err(|errors| {
+        invalid(errors.first().map_or_else(
+            || "syntax error".to_owned(),
+            |(_, error)| load_message(error),
+        ))
+    })?;
     let filter = Compiler::default()
         .with_funs(funs)
         .compile(modules)
-        .map_err(|errors| Failure::usage(format!("invalid jq program: {errors:?}")))?;
+        .map_err(|errors| {
+            invalid(
+                errors
+                    .first()
+                    .and_then(|(_, list)| list.first())
+                    .map_or_else(
+                        || "compile error".to_owned(),
+                        |(name, kind)| format!("undefined {} {name}", kind.as_str()),
+                    ),
+            )
+        })?;
     let ctx = Ctx::<data::JustLut<Val>>::new(&filter.lut, Vars::new([]));
     for result in filter.id.run((ctx, input)).map(unwrap_valr) {
         let output = result.map_err(|error| Failure::input(format!("{error}")))?;

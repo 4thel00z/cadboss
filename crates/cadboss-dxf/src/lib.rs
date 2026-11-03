@@ -17,7 +17,7 @@ mod tables;
 pub mod tape;
 mod textgroups;
 
-pub use binary::SENTINEL;
+pub use binary::{value_kind, ValueKind, SENTINEL};
 pub use blocks::{read_blocks, BlockDef};
 pub use codepage::{decode, decode_unescaped, unescape, Codepage};
 pub use document::{DxfDocument, Options};

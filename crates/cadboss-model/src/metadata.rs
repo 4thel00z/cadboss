@@ -120,6 +120,15 @@ pub enum LayoutKind {
     Paper,
 }
 
+impl LayoutKind {
+    pub fn label(self) -> &'static str {
+        match self {
+            LayoutKind::Model => "Model",
+            LayoutKind::Paper => "Paper",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Layout {
     pub name: Text,

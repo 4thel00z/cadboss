@@ -40,7 +40,8 @@ pub fn run(args: &TextArgs, doc: &DxfDocument, out: &mut dyn Write) -> Result<Re
     let layout = args.layout.as_deref().map(Text::from);
     for (group, label, items) in entries {
         let selected = args.group == Group::All || group == Some(args.group);
-        if !selected {
+        let scoped = layout.is_none() || !matches!(group, None | Some(Group::Names));
+        if !selected || !scoped {
             continue;
         }
         let kept: Vec<&TextItem> = items

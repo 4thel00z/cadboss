@@ -40,6 +40,24 @@ fn value_width(code: i16) -> ValueWidth {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ValueKind {
+    Float,
+    Integer,
+    Text,
+}
+
+/// How a binary value of this group code is encoded: fixed-width float, fixed-width integer or bytes.
+pub fn value_kind(code: i16) -> ValueKind {
+    match value_width(code) {
+        ValueWidth::F64 => ValueKind::Float,
+        ValueWidth::I16 | ValueWidth::I32 | ValueWidth::I64 | ValueWidth::Bool => {
+            ValueKind::Integer
+        }
+        ValueWidth::Str | ValueWidth::Chunk => ValueKind::Text,
+    }
+}
+
 struct Span {
     offset: usize,
     len: usize,

@@ -17,8 +17,10 @@ pub fn run(doc: &DxfDocument, out: &mut dyn Write) -> Result<Report, Failure> {
     for layout in &document.layouts {
         writeln!(
             out,
-            "{}\t{:?}\t{}",
-            layout.name, layout.kind, layout.entity_count
+            "{}\t{}\t{}",
+            layout.name,
+            layout.kind.label(),
+            layout.entity_count
         )?;
     }
     Ok(report)

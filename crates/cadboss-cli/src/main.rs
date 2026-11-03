@@ -93,16 +93,18 @@ fn main() -> ExitCode {
         out.flush()?;
         Ok(report)
     });
+    drop(out);
+    let mut err = std::io::stderr();
     match result {
         Ok(report) => {
             if !report.is_empty() {
-                eprintln!("warning: {}", report.summary());
+                writeln!(err, "warning: {}", report.summary()).ok();
             }
             ExitCode::SUCCESS
         }
+        Err(failure) if failure.broken_pipe => ExitCode::SUCCESS,
         Err(failure) => {
-            drop(out);
-            eprintln!("cadboss: {}", failure.message);
+            writeln!(err, "cadboss: {}", failure.message).ok();
             ExitCode::from(u8::try_from(failure.code).unwrap_or(1))
         }
     }

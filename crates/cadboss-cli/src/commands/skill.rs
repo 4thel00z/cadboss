@@ -24,7 +24,8 @@ pub enum SkillAction {
 
 fn home() -> Result<PathBuf, Failure> {
     std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
+        .filter(|value| !value.is_empty())
+        .or_else(|| std::env::var_os("USERPROFILE").filter(|value| !value.is_empty()))
         .map(PathBuf::from)
         .ok_or_else(|| Failure::usage("cannot find the home directory (HOME or USERPROFILE)"))
 }

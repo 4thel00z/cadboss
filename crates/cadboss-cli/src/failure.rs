@@ -4,6 +4,7 @@ use cadboss_core::Error;
 pub struct Failure {
     pub message: String,
     pub code: i32,
+    pub broken_pipe: bool,
 }
 
 impl Failure {
@@ -11,6 +12,7 @@ impl Failure {
         Failure {
             message: message.into(),
             code: 1,
+            broken_pipe: false,
         }
     }
 
@@ -18,6 +20,7 @@ impl Failure {
         Failure {
             message: message.into(),
             code: 2,
+            broken_pipe: false,
         }
     }
 }
@@ -30,7 +33,10 @@ impl From<Error> for Failure {
 
 impl From<std::io::Error> for Failure {
     fn from(error: std::io::Error) -> Failure {
-        Failure::input(error.to_string())
+        Failure {
+            broken_pipe: error.kind() == std::io::ErrorKind::BrokenPipe,
+            ..Failure::input(error.to_string())
+        }
     }
 }
 
