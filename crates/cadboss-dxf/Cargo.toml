@@ -13,3 +13,4 @@ workspace = true
 [dependencies]
 cadboss-core.workspace = true
 cadboss-model.workspace = true
+memchr = { workspace = true }
