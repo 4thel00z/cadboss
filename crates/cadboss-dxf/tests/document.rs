@@ -246,7 +246,7 @@ fn an_empty_file_is_an_empty_error() {
 #[test]
 fn layout_limit_truncates_layouts_with_a_report() -> Result<(), Error> {
     let document = DxfDocument::load(multi_layout(300))?;
-    assert_eq!(document.layouts().len(), 200);
+    assert_eq!(document.layouts().len(), 201);
     assert!(document.report().skipped.contains(&Skipped {
         kind: SkipKind::Object,
         reason: SkipReason::EntityLimit,
@@ -476,5 +476,66 @@ fn walk_detects_a_two_block_cycle() -> Result<(), Error> {
     let report = document.walk("Model", &mut |_, _, _| visited += 1);
     assert_eq!(visited, 3);
     assert_eq!(noted(&report, SkipKind::Entity, SkipReason::Malformed), 1);
+    Ok(())
+}
+
+#[test]
+fn layout_cap_keeps_model_and_the_lowest_tab_paper_layouts() -> Result<(), Error> {
+    let bytes = file(&[
+        (
+            "TABLES",
+            &[
+                (0, "TABLE"),
+                (2, "BLOCK_RECORD"),
+                (0, "BLOCK_RECORD"),
+                (5, "A"),
+                (2, "*Model_Space"),
+                (0, "BLOCK_RECORD"),
+                (5, "B"),
+                (2, "*Paper_Space"),
+                (0, "BLOCK_RECORD"),
+                (5, "C"),
+                (2, "*Paper_Space1"),
+                (0, "BLOCK_RECORD"),
+                (5, "D"),
+                (2, "*Paper_Space2"),
+                (0, "ENDTAB"),
+            ],
+        ),
+        (
+            "OBJECTS",
+            &[
+                (0, "LAYOUT"),
+                (1, "Sheet3"),
+                (71, "3"),
+                (330, "D"),
+                (0, "LAYOUT"),
+                (1, "Sheet1"),
+                (71, "1"),
+                (330, "B"),
+                (0, "LAYOUT"),
+                (1, "Sheet2"),
+                (71, "2"),
+                (330, "C"),
+                (0, "LAYOUT"),
+                (1, "Model"),
+                (71, "0"),
+                (330, "A"),
+            ],
+        ),
+    ]);
+    let mut options = Options::default();
+    options.budget.max_layouts = 2;
+    let document = DxfDocument::load_with_options(bytes, &options)?;
+    let layouts: Vec<&Text> = document
+        .layouts()
+        .iter()
+        .map(|layout| &layout.name)
+        .collect();
+    assert_eq!(names(layouts), ["Model", "Sheet1", "Sheet2"]);
+    assert_eq!(
+        noted(document.report(), SkipKind::Object, SkipReason::EntityLimit),
+        1
+    );
     Ok(())
 }

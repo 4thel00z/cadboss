@@ -4,6 +4,7 @@ use crate::error::{Error, Result};
 pub struct Budget {
     pub max_bytes: u64,
     pub max_entities: u64,
+    /// Cap on paper layouts; the model layout is always kept and not counted.
     pub max_layouts: u32,
     pub max_nesting: u32,
     pub max_string_bytes: u32,
