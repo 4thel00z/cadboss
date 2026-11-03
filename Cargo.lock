@@ -118,6 +118,10 @@ dependencies = [
 [[package]]
 name = "cadboss-testkit"
 version = "0.1.0"
+dependencies = [
+ "cadboss-core",
+ "cadboss-dxf",
+]
 
 [[package]]
 name = "clap"

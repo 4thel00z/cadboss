@@ -1,0 +1,6968 @@
+  0
+SECTION
+  2
+HEADER
+  9
+$ACADVER
+  1
+AC1027
+  9
+$DWGCODEPAGE
+  3
+ANSI_1252
+  9
+$INSUNITS
+ 70
+4
+  9
+$EXTMIN
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  9
+$EXTMAX
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  9
+$TDCREATE
+ 40
+2460371.5
+  9
+$TDUPDATE
+ 40
+2460372.5
+  9
+$LASTSAVEDBY
+  1
+cadboss-testkit
+  0
+ENDSEC
+  0
+SECTION
+  2
+TABLES
+  0
+TABLE
+  2
+LAYER
+  5
+100
+330
+0
+100
+AcDbSymbolTable
+ 70
+1
+  0
+LAYER
+  5
+101
+330
+100
+100
+AcDbSymbolTableRecord
+100
+AcDbLayerTableRecord
+  2
+0
+ 70
+0
+ 62
+7
+  6
+Continuous
+  0
+ENDTAB
+  0
+TABLE
+  2
+BLOCK_RECORD
+  5
+102
+330
+0
+100
+AcDbSymbolTable
+ 70
+73
+  0
+BLOCK_RECORD
+  5
+103
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+*Model_Space
+340
+14D
+  0
+BLOCK_RECORD
+  5
+104
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+*Paper_Space
+340
+14E
+  0
+BLOCK_RECORD
+  5
+105
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B0
+  0
+BLOCK_RECORD
+  5
+106
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B1
+  0
+BLOCK_RECORD
+  5
+107
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B2
+  0
+BLOCK_RECORD
+  5
+108
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B3
+  0
+BLOCK_RECORD
+  5
+109
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B4
+  0
+BLOCK_RECORD
+  5
+10A
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B5
+  0
+BLOCK_RECORD
+  5
+10B
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B6
+  0
+BLOCK_RECORD
+  5
+10C
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B7
+  0
+BLOCK_RECORD
+  5
+10D
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B8
+  0
+BLOCK_RECORD
+  5
+10E
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B9
+  0
+BLOCK_RECORD
+  5
+10F
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B10
+  0
+BLOCK_RECORD
+  5
+110
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B11
+  0
+BLOCK_RECORD
+  5
+111
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B12
+  0
+BLOCK_RECORD
+  5
+112
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B13
+  0
+BLOCK_RECORD
+  5
+113
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B14
+  0
+BLOCK_RECORD
+  5
+114
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B15
+  0
+BLOCK_RECORD
+  5
+115
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B16
+  0
+BLOCK_RECORD
+  5
+116
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B17
+  0
+BLOCK_RECORD
+  5
+117
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B18
+  0
+BLOCK_RECORD
+  5
+118
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B19
+  0
+BLOCK_RECORD
+  5
+119
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B20
+  0
+BLOCK_RECORD
+  5
+11A
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B21
+  0
+BLOCK_RECORD
+  5
+11B
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B22
+  0
+BLOCK_RECORD
+  5
+11C
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B23
+  0
+BLOCK_RECORD
+  5
+11D
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B24
+  0
+BLOCK_RECORD
+  5
+11E
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B25
+  0
+BLOCK_RECORD
+  5
+11F
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B26
+  0
+BLOCK_RECORD
+  5
+120
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B27
+  0
+BLOCK_RECORD
+  5
+121
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B28
+  0
+BLOCK_RECORD
+  5
+122
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B29
+  0
+BLOCK_RECORD
+  5
+123
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B30
+  0
+BLOCK_RECORD
+  5
+124
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B31
+  0
+BLOCK_RECORD
+  5
+125
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B32
+  0
+BLOCK_RECORD
+  5
+126
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B33
+  0
+BLOCK_RECORD
+  5
+127
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B34
+  0
+BLOCK_RECORD
+  5
+128
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B35
+  0
+BLOCK_RECORD
+  5
+129
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B36
+  0
+BLOCK_RECORD
+  5
+12A
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B37
+  0
+BLOCK_RECORD
+  5
+12B
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B38
+  0
+BLOCK_RECORD
+  5
+12C
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B39
+  0
+BLOCK_RECORD
+  5
+12D
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B40
+  0
+BLOCK_RECORD
+  5
+12E
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B41
+  0
+BLOCK_RECORD
+  5
+12F
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B42
+  0
+BLOCK_RECORD
+  5
+130
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B43
+  0
+BLOCK_RECORD
+  5
+131
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B44
+  0
+BLOCK_RECORD
+  5
+132
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B45
+  0
+BLOCK_RECORD
+  5
+133
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B46
+  0
+BLOCK_RECORD
+  5
+134
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B47
+  0
+BLOCK_RECORD
+  5
+135
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B48
+  0
+BLOCK_RECORD
+  5
+136
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B49
+  0
+BLOCK_RECORD
+  5
+137
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B50
+  0
+BLOCK_RECORD
+  5
+138
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B51
+  0
+BLOCK_RECORD
+  5
+139
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B52
+  0
+BLOCK_RECORD
+  5
+13A
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B53
+  0
+BLOCK_RECORD
+  5
+13B
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B54
+  0
+BLOCK_RECORD
+  5
+13C
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B55
+  0
+BLOCK_RECORD
+  5
+13D
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B56
+  0
+BLOCK_RECORD
+  5
+13E
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B57
+  0
+BLOCK_RECORD
+  5
+13F
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B58
+  0
+BLOCK_RECORD
+  5
+140
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B59
+  0
+BLOCK_RECORD
+  5
+141
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B60
+  0
+BLOCK_RECORD
+  5
+142
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B61
+  0
+BLOCK_RECORD
+  5
+143
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B62
+  0
+BLOCK_RECORD
+  5
+144
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B63
+  0
+BLOCK_RECORD
+  5
+145
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B64
+  0
+BLOCK_RECORD
+  5
+146
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B65
+  0
+BLOCK_RECORD
+  5
+147
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B66
+  0
+BLOCK_RECORD
+  5
+148
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B67
+  0
+BLOCK_RECORD
+  5
+149
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B68
+  0
+BLOCK_RECORD
+  5
+14A
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B69
+  0
+BLOCK_RECORD
+  5
+14B
+330
+102
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+B70
+  0
+ENDTAB
+  0
+ENDSEC
+  0
+SECTION
+  2
+BLOCKS
+  0
+BLOCK
+  5
+14F
+330
+103
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+*Model_Space
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+*Model_Space
+  1
+
+  0
+ENDBLK
+  5
+150
+330
+103
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+151
+330
+104
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+*Paper_Space
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+*Paper_Space
+  1
+
+  0
+ENDBLK
+  5
+152
+330
+104
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+153
+330
+105
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B0
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B0
+  1
+
+  0
+LINE
+  5
+154
+330
+105
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+155
+330
+105
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B1
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+156
+330
+105
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+157
+330
+106
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B1
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B1
+  1
+
+  0
+LINE
+  5
+158
+330
+106
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+159
+330
+106
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B2
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+15A
+330
+106
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+15B
+330
+107
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B2
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B2
+  1
+
+  0
+LINE
+  5
+15C
+330
+107
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+15D
+330
+107
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B3
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+15E
+330
+107
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+15F
+330
+108
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B3
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B3
+  1
+
+  0
+LINE
+  5
+160
+330
+108
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+161
+330
+108
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B4
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+162
+330
+108
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+163
+330
+109
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B4
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B4
+  1
+
+  0
+LINE
+  5
+164
+330
+109
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+165
+330
+109
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B5
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+166
+330
+109
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+167
+330
+10A
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B5
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B5
+  1
+
+  0
+LINE
+  5
+168
+330
+10A
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+169
+330
+10A
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B6
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+16A
+330
+10A
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+16B
+330
+10B
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B6
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B6
+  1
+
+  0
+LINE
+  5
+16C
+330
+10B
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+16D
+330
+10B
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B7
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+16E
+330
+10B
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+16F
+330
+10C
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B7
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B7
+  1
+
+  0
+LINE
+  5
+170
+330
+10C
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+171
+330
+10C
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B8
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+172
+330
+10C
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+173
+330
+10D
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B8
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B8
+  1
+
+  0
+LINE
+  5
+174
+330
+10D
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+175
+330
+10D
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B9
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+176
+330
+10D
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+177
+330
+10E
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B9
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B9
+  1
+
+  0
+LINE
+  5
+178
+330
+10E
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+179
+330
+10E
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B10
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+17A
+330
+10E
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+17B
+330
+10F
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B10
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B10
+  1
+
+  0
+LINE
+  5
+17C
+330
+10F
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+17D
+330
+10F
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B11
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+17E
+330
+10F
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+17F
+330
+110
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B11
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B11
+  1
+
+  0
+LINE
+  5
+180
+330
+110
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+181
+330
+110
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B12
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+182
+330
+110
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+183
+330
+111
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B12
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B12
+  1
+
+  0
+LINE
+  5
+184
+330
+111
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+185
+330
+111
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B13
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+186
+330
+111
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+187
+330
+112
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B13
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B13
+  1
+
+  0
+LINE
+  5
+188
+330
+112
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+189
+330
+112
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B14
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+18A
+330
+112
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+18B
+330
+113
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B14
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B14
+  1
+
+  0
+LINE
+  5
+18C
+330
+113
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+18D
+330
+113
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B15
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+18E
+330
+113
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+18F
+330
+114
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B15
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B15
+  1
+
+  0
+LINE
+  5
+190
+330
+114
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+191
+330
+114
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B16
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+192
+330
+114
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+193
+330
+115
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B16
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B16
+  1
+
+  0
+LINE
+  5
+194
+330
+115
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+195
+330
+115
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B17
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+196
+330
+115
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+197
+330
+116
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B17
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B17
+  1
+
+  0
+LINE
+  5
+198
+330
+116
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+199
+330
+116
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B18
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+19A
+330
+116
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+19B
+330
+117
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B18
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B18
+  1
+
+  0
+LINE
+  5
+19C
+330
+117
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+19D
+330
+117
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B19
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+19E
+330
+117
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+19F
+330
+118
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B19
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B19
+  1
+
+  0
+LINE
+  5
+1A0
+330
+118
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+1A1
+330
+118
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B20
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+1A2
+330
+118
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+1A3
+330
+119
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B20
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B20
+  1
+
+  0
+LINE
+  5
+1A4
+330
+119
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+1A5
+330
+119
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B21
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+1A6
+330
+119
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+1A7
+330
+11A
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B21
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B21
+  1
+
+  0
+LINE
+  5
+1A8
+330
+11A
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+1A9
+330
+11A
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B22
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+1AA
+330
+11A
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+1AB
+330
+11B
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B22
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B22
+  1
+
+  0
+LINE
+  5
+1AC
+330
+11B
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+1AD
+330
+11B
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B23
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+1AE
+330
+11B
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+1AF
+330
+11C
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B23
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B23
+  1
+
+  0
+LINE
+  5
+1B0
+330
+11C
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+1B1
+330
+11C
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B24
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+1B2
+330
+11C
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+1B3
+330
+11D
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B24
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B24
+  1
+
+  0
+LINE
+  5
+1B4
+330
+11D
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+1B5
+330
+11D
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B25
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+1B6
+330
+11D
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+1B7
+330
+11E
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B25
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B25
+  1
+
+  0
+LINE
+  5
+1B8
+330
+11E
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+1B9
+330
+11E
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B26
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+1BA
+330
+11E
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+1BB
+330
+11F
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B26
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B26
+  1
+
+  0
+LINE
+  5
+1BC
+330
+11F
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+1BD
+330
+11F
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B27
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+1BE
+330
+11F
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+1BF
+330
+120
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B27
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B27
+  1
+
+  0
+LINE
+  5
+1C0
+330
+120
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+1C1
+330
+120
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B28
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+1C2
+330
+120
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+1C3
+330
+121
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B28
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B28
+  1
+
+  0
+LINE
+  5
+1C4
+330
+121
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+1C5
+330
+121
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B29
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+1C6
+330
+121
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+1C7
+330
+122
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B29
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B29
+  1
+
+  0
+LINE
+  5
+1C8
+330
+122
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+1C9
+330
+122
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B30
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+1CA
+330
+122
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+1CB
+330
+123
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B30
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B30
+  1
+
+  0
+LINE
+  5
+1CC
+330
+123
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+1CD
+330
+123
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B31
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+1CE
+330
+123
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+1CF
+330
+124
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B31
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B31
+  1
+
+  0
+LINE
+  5
+1D0
+330
+124
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+1D1
+330
+124
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B32
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+1D2
+330
+124
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+1D3
+330
+125
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B32
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B32
+  1
+
+  0
+LINE
+  5
+1D4
+330
+125
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+1D5
+330
+125
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B33
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+1D6
+330
+125
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+1D7
+330
+126
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B33
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B33
+  1
+
+  0
+LINE
+  5
+1D8
+330
+126
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+1D9
+330
+126
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B34
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+1DA
+330
+126
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+1DB
+330
+127
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B34
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B34
+  1
+
+  0
+LINE
+  5
+1DC
+330
+127
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+1DD
+330
+127
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B35
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+1DE
+330
+127
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+1DF
+330
+128
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B35
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B35
+  1
+
+  0
+LINE
+  5
+1E0
+330
+128
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+1E1
+330
+128
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B36
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+1E2
+330
+128
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+1E3
+330
+129
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B36
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B36
+  1
+
+  0
+LINE
+  5
+1E4
+330
+129
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+1E5
+330
+129
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B37
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+1E6
+330
+129
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+1E7
+330
+12A
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B37
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B37
+  1
+
+  0
+LINE
+  5
+1E8
+330
+12A
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+1E9
+330
+12A
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B38
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+1EA
+330
+12A
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+1EB
+330
+12B
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B38
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B38
+  1
+
+  0
+LINE
+  5
+1EC
+330
+12B
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+1ED
+330
+12B
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B39
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+1EE
+330
+12B
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+1EF
+330
+12C
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B39
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B39
+  1
+
+  0
+LINE
+  5
+1F0
+330
+12C
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+1F1
+330
+12C
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B40
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+1F2
+330
+12C
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+1F3
+330
+12D
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B40
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B40
+  1
+
+  0
+LINE
+  5
+1F4
+330
+12D
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+1F5
+330
+12D
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B41
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+1F6
+330
+12D
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+1F7
+330
+12E
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B41
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B41
+  1
+
+  0
+LINE
+  5
+1F8
+330
+12E
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+1F9
+330
+12E
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B42
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+1FA
+330
+12E
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+1FB
+330
+12F
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B42
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B42
+  1
+
+  0
+LINE
+  5
+1FC
+330
+12F
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+1FD
+330
+12F
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B43
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+1FE
+330
+12F
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+1FF
+330
+130
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B43
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B43
+  1
+
+  0
+LINE
+  5
+200
+330
+130
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+201
+330
+130
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B44
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+202
+330
+130
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+203
+330
+131
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B44
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B44
+  1
+
+  0
+LINE
+  5
+204
+330
+131
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+205
+330
+131
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B45
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+206
+330
+131
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+207
+330
+132
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B45
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B45
+  1
+
+  0
+LINE
+  5
+208
+330
+132
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+209
+330
+132
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B46
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+20A
+330
+132
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+20B
+330
+133
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B46
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B46
+  1
+
+  0
+LINE
+  5
+20C
+330
+133
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+20D
+330
+133
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B47
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+20E
+330
+133
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+20F
+330
+134
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B47
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B47
+  1
+
+  0
+LINE
+  5
+210
+330
+134
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+211
+330
+134
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B48
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+212
+330
+134
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+213
+330
+135
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B48
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B48
+  1
+
+  0
+LINE
+  5
+214
+330
+135
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+215
+330
+135
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B49
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+216
+330
+135
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+217
+330
+136
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B49
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B49
+  1
+
+  0
+LINE
+  5
+218
+330
+136
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+219
+330
+136
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B50
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+21A
+330
+136
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+21B
+330
+137
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B50
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B50
+  1
+
+  0
+LINE
+  5
+21C
+330
+137
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+21D
+330
+137
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B51
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+21E
+330
+137
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+21F
+330
+138
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B51
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B51
+  1
+
+  0
+LINE
+  5
+220
+330
+138
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+221
+330
+138
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B52
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+222
+330
+138
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+223
+330
+139
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B52
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B52
+  1
+
+  0
+LINE
+  5
+224
+330
+139
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+225
+330
+139
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B53
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+226
+330
+139
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+227
+330
+13A
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B53
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B53
+  1
+
+  0
+LINE
+  5
+228
+330
+13A
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+229
+330
+13A
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B54
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+22A
+330
+13A
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+22B
+330
+13B
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B54
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B54
+  1
+
+  0
+LINE
+  5
+22C
+330
+13B
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+22D
+330
+13B
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B55
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+22E
+330
+13B
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+22F
+330
+13C
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B55
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B55
+  1
+
+  0
+LINE
+  5
+230
+330
+13C
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+231
+330
+13C
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B56
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+232
+330
+13C
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+233
+330
+13D
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B56
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B56
+  1
+
+  0
+LINE
+  5
+234
+330
+13D
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+235
+330
+13D
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B57
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+236
+330
+13D
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+237
+330
+13E
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B57
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B57
+  1
+
+  0
+LINE
+  5
+238
+330
+13E
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+239
+330
+13E
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B58
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+23A
+330
+13E
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+23B
+330
+13F
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B58
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B58
+  1
+
+  0
+LINE
+  5
+23C
+330
+13F
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+23D
+330
+13F
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B59
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+23E
+330
+13F
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+23F
+330
+140
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B59
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B59
+  1
+
+  0
+LINE
+  5
+240
+330
+140
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+241
+330
+140
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B60
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+242
+330
+140
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+243
+330
+141
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B60
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B60
+  1
+
+  0
+LINE
+  5
+244
+330
+141
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+245
+330
+141
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B61
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+246
+330
+141
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+247
+330
+142
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B61
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B61
+  1
+
+  0
+LINE
+  5
+248
+330
+142
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+249
+330
+142
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B62
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+24A
+330
+142
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+24B
+330
+143
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B62
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B62
+  1
+
+  0
+LINE
+  5
+24C
+330
+143
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+24D
+330
+143
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B63
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+24E
+330
+143
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+24F
+330
+144
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B63
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B63
+  1
+
+  0
+LINE
+  5
+250
+330
+144
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+251
+330
+144
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B64
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+252
+330
+144
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+253
+330
+145
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B64
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B64
+  1
+
+  0
+LINE
+  5
+254
+330
+145
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+255
+330
+145
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B65
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+256
+330
+145
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+257
+330
+146
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B65
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B65
+  1
+
+  0
+LINE
+  5
+258
+330
+146
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+259
+330
+146
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B66
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+25A
+330
+146
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+25B
+330
+147
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B66
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B66
+  1
+
+  0
+LINE
+  5
+25C
+330
+147
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+25D
+330
+147
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B67
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+25E
+330
+147
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+25F
+330
+148
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B67
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B67
+  1
+
+  0
+LINE
+  5
+260
+330
+148
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+261
+330
+148
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B68
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+262
+330
+148
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+263
+330
+149
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B68
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B68
+  1
+
+  0
+LINE
+  5
+264
+330
+149
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+265
+330
+149
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B69
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+266
+330
+149
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+267
+330
+14A
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B69
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B69
+  1
+
+  0
+LINE
+  5
+268
+330
+14A
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+INSERT
+  5
+269
+330
+14A
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B70
+ 10
+1.0
+ 20
+1.0
+ 30
+0.0
+  0
+ENDBLK
+  5
+26A
+330
+14A
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+26B
+330
+14B
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+B70
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+B70
+  1
+
+  0
+LINE
+  5
+26C
+330
+14B
+100
+AcDbEntity
+  8
+0
+100
+AcDbLine
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10.0
+ 21
+10.0
+ 31
+0.0
+  0
+ENDBLK
+  5
+26D
+330
+14B
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+ENDSEC
+  0
+SECTION
+  2
+ENTITIES
+  0
+INSERT
+  5
+26E
+330
+103
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockReference
+  2
+B0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  0
+ENDSEC
+  0
+SECTION
+  2
+OBJECTS
+  0
+DICTIONARY
+  5
+C
+330
+0
+100
+AcDbDictionary
+281
+1
+  3
+ACAD_LAYOUT
+350
+14C
+  0
+DICTIONARY
+  5
+14C
+330
+C
+100
+AcDbDictionary
+281
+1
+  3
+Model
+350
+14D
+  3
+Layout1
+350
+14E
+  0
+LAYOUT
+  5
+14D
+330
+14C
+100
+AcDbPlotSettings
+  1
+Model
+100
+AcDbLayout
+  1
+Model
+ 70
+1
+ 71
+0
+330
+103
+  0
+LAYOUT
+  5
+14E
+330
+14C
+100
+AcDbPlotSettings
+  1
+Layout1
+100
+AcDbLayout
+  1
+Layout1
+ 70
+1
+ 71
+1
+330
+104
+  0
+ENDSEC
+  0
+EOF
