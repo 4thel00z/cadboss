@@ -44,8 +44,8 @@ wheel: ## Build a release wheel
 bench: ## Run benchmarks
 	cargo bench --workspace
 
-samples: ## Fetch sample drawings (not yet implemented)
-	@echo "not yet"
+samples: ## Download and verify the public sample drawings
+	uv run python scripts/samples.py
 
 FUZZ_SECONDS ?= 60
 
