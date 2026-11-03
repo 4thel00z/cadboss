@@ -111,6 +111,13 @@ impl Transform {
         }
     }
 
+    pub fn translate(offset: Point) -> Transform {
+        Transform {
+            t: offset,
+            ..Transform::identity()
+        }
+    }
+
     /// Scales per axis, rotates counter-clockwise about Z by `rotation_deg`, then translates by `base`.
     pub fn insert(base: Point, scale: Point, rotation_deg: f64) -> Transform {
         let (sin, cos) = rotation_deg.to_radians().sin_cos();
@@ -258,6 +265,13 @@ mod tests {
         let t = Transform::insert(Point::xy(10.0, 10.0), Point::new(1.0, 1.0, 1.0), 90.0);
         let p = t.apply(Point::xy(1.0, 0.0));
         assert!(close(p.x, 10.0) && close(p.y, 11.0));
+    }
+
+    #[test]
+    fn translate_moves_a_point_by_the_offset() {
+        let moved =
+            Transform::translate(Point::new(1.0, -2.0, 3.0)).apply(Point::new(4.0, 5.0, 6.0));
+        assert!(close(moved.x, 5.0) && close(moved.y, 3.0) && close(moved.z, 9.0));
     }
 
     #[test]
