@@ -4,9 +4,11 @@ use std::path::PathBuf;
 use cadboss_core::Report;
 use cadboss_dxf::DxfDocument;
 use cadboss_model::{Text, TextItem};
+use cadboss_output::one_line;
 use clap::{Args, ValueEnum};
 
 use crate::failure::Failure;
+use crate::input::known_layout;
 
 #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum Group {
@@ -28,6 +30,7 @@ pub struct TextArgs {
 }
 
 pub fn run(args: &TextArgs, doc: &DxfDocument, out: &mut dyn Write) -> Result<Report, Failure> {
+    known_layout(doc, args.layout.as_deref())?;
     let (groups, report) = doc.text_reporting();
     let entries: [(Option<Group>, &str, &[TextItem]); 6] = [
         (Some(Group::TitleBlock), "title-block", &groups.title_block),
@@ -55,7 +58,7 @@ pub fn run(args: &TextArgs, doc: &DxfDocument, out: &mut dyn Write) -> Result<Re
             writeln!(out, "# {label}")?;
         }
         for item in kept {
-            writeln!(out, "{}", item.text)?;
+            writeln!(out, "{}", one_line(&item.text.to_string()))?;
         }
     }
     Ok(report)

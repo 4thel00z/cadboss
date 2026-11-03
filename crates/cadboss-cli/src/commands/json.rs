@@ -10,6 +10,7 @@ use serde::ser::{SerializeMap, Serializer};
 use serde::Serialize;
 
 use crate::failure::Failure;
+use crate::input::known_layout;
 
 #[derive(Args)]
 pub struct JsonArgs {
@@ -95,6 +96,7 @@ fn write(out: &mut dyn Write, export: &Export, compact: bool) -> Result<(), Fail
 }
 
 pub fn run(args: &JsonArgs, doc: &DxfDocument, out: &mut dyn Write) -> Result<Report, Failure> {
+    known_layout(doc, args.layout.as_deref())?;
     let (document, report) = doc.document_reporting();
     let export = Export::new(doc, &document, args.entities, args.layout.as_deref());
     write(out, &export, args.compact)?;

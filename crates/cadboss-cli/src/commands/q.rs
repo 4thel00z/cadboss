@@ -11,6 +11,7 @@ use serde::Deserialize;
 
 use crate::commands::json::Export;
 use crate::failure::Failure;
+use crate::input::known_layout;
 
 #[derive(Args)]
 pub struct QArgs {
@@ -64,6 +65,7 @@ fn invalid(message: String) -> Failure {
 }
 
 pub fn run(args: &QArgs, doc: &DxfDocument, out: &mut dyn Write) -> Result<Report, Failure> {
+    known_layout(doc, args.layout.as_deref())?;
     let (document, report) = doc.document_reporting();
     let export = Export::new(doc, &document, args.entities, args.layout.as_deref());
     let input = Val::deserialize(serde_json::to_value(&export)?)?;

@@ -254,3 +254,33 @@ fn json_entities_stream_the_same_document_as_q() -> TestResult {
     assert_eq!(only.keys().collect::<Vec<_>>(), ["Sheet2"]);
     Ok(())
 }
+
+#[test]
+fn text_prints_each_item_on_one_line() -> TestResult {
+    let bytes = cadboss_testkit::dxf::DxfBuilder::new()
+        .mtext("first\\Psecond", (0.0, 0.0), 1.0)
+        .build();
+    let path = temp_file("lines.dxf", &bytes)?;
+    let output = cadboss(&["text", &path_text(&path.0), "--group", "annotations"])?;
+    assert_eq!(stdout(&output), "first second\n");
+    Ok(())
+}
+
+#[test]
+fn an_unknown_layout_exits_2_and_lists_the_layouts() -> TestResult {
+    let path = fixture("simple.dxf");
+    for command in ["text", "json", "q"] {
+        let mut args = vec![command, path.as_str(), "--layout", "Nope"];
+        if command == "q" {
+            args.push(".");
+        }
+        let output = cadboss(&args)?;
+        assert_eq!(output.status.code(), Some(2), "{command}");
+        assert_eq!(
+            stderr(&output),
+            "cadboss: unknown layout: Nope (available: Model, Layout1)\n",
+            "{command}"
+        );
+    }
+    Ok(())
+}

@@ -5,13 +5,13 @@ description: Use when reading, extracting text or metadata from, or exploring CA
 
 # cadboss
 
-Reads DXF files (ASCII and binary) and prints metadata, text, Markdown or JSON. Every command accepts `--budget KEY=VALUE` (repeatable; keys: `max_bytes`, `max_entities`, `max_layouts`, `max_nesting`, `max_string_bytes`, `max_tokens`) and `--threads N`. Skipped content is reported on stderr as `warning: ...`. Exit code 1 means a bad input file, 2 means bad arguments or a bad jq program.
+Reads DXF files (ASCII and binary) and prints metadata, text, Markdown or JSON. Every command accepts `--budget KEY=VALUE` (repeatable; keys: `max_bytes`, `max_entities`, `max_layouts`, `max_nesting`, `max_string_bytes`, `max_tokens`) and `--threads N`. Skipped content is reported on stderr as `warning: ...`. Exit code 1 means a bad input file, 2 means bad arguments or a bad jq program; a `--layout` that names no layout exits 2 and lists the available ones.
 
 ## Commands
 
 - `cadboss info FILE` prints format, units, counts, layouts and extents.
   Example: `cadboss info plan.dxf`
-- `cadboss text FILE [--layout NAME] [--group title-block|annotations|names|attributes|references|all]` prints one text item per line, grouped under `# group` headers when the group is `all` (which also prints a `# properties` group). With `--layout`, only title-block, annotations, attributes and references are shown.
+- `cadboss text FILE [--layout NAME] [--group title-block|annotations|names|attributes|references|all]` prints one text item per line (line breaks inside an item become spaces), grouped under `# group` headers when the group is `all` (which also prints a `# properties` group). With `--layout`, only title-block, annotations, attributes and references are shown.
   Example: `cadboss text plan.dxf --group title-block`
 - `cadboss md FILE [--title T]` prints a Markdown summary; the title defaults to the file stem.
   Example: `cadboss md plan.dxf --title "Pump plan"`

@@ -40,7 +40,7 @@ fn metadata(doc: &Document) -> String {
     lines.extend(
         meta.author
             .as_ref()
-            .map(|author| format!("- Author: {}", inline(&author.to_string()))),
+            .map(|author| format!("- Author: {}", one_line(&author.to_string()))),
     );
     lines.join("\n")
 }
@@ -59,13 +59,13 @@ fn layout_blocks(doc: &Document, layout: &Layout) -> Vec<String> {
     let in_layout = |item: &&TextItem| item.layout == layout.name;
     let title_block: Vec<&TextItem> = doc.text.title_block.iter().filter(in_layout).collect();
     let annotations: Vec<&TextItem> = doc.text.annotations.iter().filter(in_layout).collect();
-    let mut blocks = vec![format!("## Layout: {}", inline(&layout.name.to_string()))];
+    let mut blocks = vec![format!("## Layout: {}", one_line(&layout.name.to_string()))];
     if !title_block.is_empty() {
         blocks.push(bullets(
             "### Title block",
             title_block
                 .into_iter()
-                .map(|item| inline(&item.text.to_string())),
+                .map(|item| one_line(&item.text.to_string())),
         ));
     }
     if annotations.is_empty() {
@@ -91,14 +91,14 @@ fn layer_groups(annotations: &[&TextItem]) -> Vec<String> {
         .iter()
         .filter_map(|items| {
             let first = items.first()?;
-            let heading = format!("#### Layer {}", inline(&first.layer.to_string()));
+            let heading = format!("#### Layer {}", one_line(&first.layer.to_string()));
             Some(bullets(&heading, items.iter().copied().map(annotation)))
         })
         .collect()
 }
 
 fn annotation(item: &TextItem) -> String {
-    let text = inline(&item.text.to_string());
+    let text = one_line(&item.text.to_string());
     match item.height {
         Some(height) => format!("{text} (h {})", format_number(height)),
         None => text,
@@ -127,7 +127,7 @@ fn entities(doc: &Document) -> Option<String> {
 fn section(heading: &str, items: &[TextItem]) -> String {
     bullets(
         &format!("## {heading}"),
-        items.iter().map(|item| inline(&item.text.to_string())),
+        items.iter().map(|item| one_line(&item.text.to_string())),
     )
 }
 
@@ -151,12 +151,13 @@ fn bullets(heading: &str, items: impl Iterator<Item = String>) -> String {
     lines.join("\n")
 }
 
-fn inline(text: &str) -> String {
+/// The text with every line break replaced by a space.
+pub fn one_line(text: &str) -> String {
     text.replace("\r\n", " ").replace(['\n', '\r'], " ")
 }
 
 fn cell(text: &str) -> String {
-    inline(text).replace('|', "\\|")
+    one_line(text).replace('|', "\\|")
 }
 
 pub fn format_number(value: f64) -> String {
