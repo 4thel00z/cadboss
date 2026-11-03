@@ -324,6 +324,7 @@ impl DxfDocument {
         self.block_index(found.block_name.as_str()?)
     }
 
+    /// The returned report carries walk-level notes only; entity decode notes come from `entities` and `block_entities`.
     pub fn walk(&self, layout: &str, visitor: &mut dyn FnMut(&Entity, &Transform, u32)) -> Report {
         self.walk_with_path(layout, &mut |entity, transform, path| {
             visitor(entity, transform, path.len() as u32);
@@ -413,8 +414,8 @@ struct Walker<'d, 'v> {
 }
 
 impl<'d> Walker<'d, '_> {
-    fn run(&mut self, mut decoder: EntityDecoder<'d>, transform: &Transform, depth: u32) {
-        for entity in decoder.by_ref() {
+    fn run(&mut self, decoder: EntityDecoder<'d>, transform: &Transform, depth: u32) {
+        for entity in decoder {
             if !self.stopped && self.visited >= self.document.budget.max_entities {
                 self.report.note(SkipKind::Entity, SkipReason::EntityLimit);
                 self.stopped = true;
@@ -426,7 +427,6 @@ impl<'d> Walker<'d, '_> {
             (self.visitor)(&entity, transform, &self.names);
             self.expand(&entity, transform, depth);
         }
-        self.report.merge(decoder.into_report());
     }
 
     fn expand(&mut self, entity: &Entity, transform: &Transform, depth: u32) {

@@ -539,3 +539,12 @@ fn layout_cap_keeps_model_and_the_lowest_tab_paper_layouts() -> Result<(), Error
     );
     Ok(())
 }
+
+#[test]
+fn walk_report_has_no_entity_decode_notes() -> Result<(), Error> {
+    let bytes = DxfBuilder::new().raw(0, "WIPEOUT").build();
+    let document = DxfDocument::load(bytes)?;
+    let report = document.walk("Model", &mut |_, _, _| {});
+    assert!(report.is_empty());
+    Ok(())
+}

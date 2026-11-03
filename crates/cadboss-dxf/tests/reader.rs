@@ -1,6 +1,6 @@
 use cadboss_core::{Error, SkipKind, SkipReason, Skipped};
 use cadboss_dxf::{load, load_reporting, open};
-use cadboss_testkit::dxf::simple_drawing;
+use cadboss_testkit::dxf::{simple_drawing, DxfBuilder};
 
 fn expected_counts() -> Vec<(String, u64)> {
     ["CIRCLE", "INSERT", "LINE", "TEXT"]
@@ -68,17 +68,54 @@ fn document_report_includes_lexer_and_entity_skips() -> Result<(), Error> {
         .iter()
         .any(|entry| entry.kind == SkipKind::Entity && entry.reason == SkipReason::Unknown));
     assert_eq!(document.report, report);
+    let unknown = report
+        .skipped
+        .iter()
+        .find(|entry| entry.kind == SkipKind::Entity && entry.reason == SkipReason::Unknown)
+        .ok_or(Error::Empty)?;
+    assert_eq!(unknown.count, 1);
     Ok(())
 }
 
 #[test]
 fn open_and_load_give_equal_documents_for_the_simple_fixture() -> Result<(), Error> {
-    let directory = std::env::temp_dir().join("cadboss-reader-test");
-    std::fs::create_dir_all(&directory)?;
-    let path = directory.join("simple.dxf");
+    let path =
+        std::env::temp_dir().join(format!("cadboss-reader-{}-simple.dxf", std::process::id()));
     std::fs::write(&path, simple_drawing())?;
     let opened = open(&path)?;
     let loaded = load(simple_drawing())?;
+    std::fs::remove_file(&path)?;
     assert_eq!(opened, loaded);
+    Ok(())
+}
+
+#[test]
+fn entity_counts_sort_by_count_descending_then_name() -> Result<(), Error> {
+    let bytes = DxfBuilder::new()
+        .line((0.0, 0.0), (1.0, 1.0))
+        .line((1.0, 1.0), (2.0, 2.0))
+        .circle((0.0, 0.0), 1.0)
+        .build();
+    let document = load(bytes)?;
+    let expected = vec![("LINE".to_owned(), 2), ("CIRCLE".to_owned(), 1)];
+    assert_eq!(document.metadata.entity_counts, expected);
+    Ok(())
+}
+
+#[test]
+fn malformed_block_body_entity_is_reported_once() -> Result<(), Error> {
+    let bytes = DxfBuilder::new()
+        .block("B", (0.0, 0.0))
+        .raw(0, "LINE")
+        .raw(10, "1.0")
+        .end()
+        .build();
+    let report = load_reporting(bytes)?.1;
+    let malformed = report
+        .skipped
+        .iter()
+        .find(|entry| entry.kind == SkipKind::Entity && entry.reason == SkipReason::Malformed)
+        .ok_or(Error::Empty)?;
+    assert_eq!(malformed.count, 1);
     Ok(())
 }
