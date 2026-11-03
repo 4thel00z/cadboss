@@ -15,9 +15,9 @@ Reads DXF files (ASCII and binary) and prints metadata, text, Markdown or JSON. 
   Example: `cadboss text plan.dxf --group title-block`
 - `cadboss md FILE [--title T]` prints a Markdown summary; the title defaults to the file stem.
   Example: `cadboss md plan.dxf --title "Pump plan"`
-- `cadboss json FILE [--compact] [--entities] [--layout NAME]` prints the unified document as JSON; `--entities` adds the entity list of each layout.
+- `cadboss json FILE [--compact] [--entities] [--layout NAME]` prints the unified document as JSON; `--entities` adds the entity list of each layout, written as it is decoded.
   Example: `cadboss json plan.dxf --entities --layout Model`
-- `cadboss q FILE PROGRAM [-r] [--entities] [--layout NAME]` runs a jq program over the same JSON as `json`, including `--entities` and `--layout`; `-r` prints strings raw.
+- `cadboss q FILE PROGRAM [-r] [--entities] [--layout NAME]` runs a jq program over the same JSON as `json`, including `--entities` and `--layout`; `-r` prints strings raw. `q` holds the whole JSON tree in memory, so `q --entities` materializes every entity of the selected layouts; prefer `json --entities` piped to a streaming tool for large files.
   Example: `cadboss q plan.dxf '.metadata.version' -r`
 - `cadboss layouts FILE` prints `name`, `kind` and entity count per layout, tab separated.
   Example: `cadboss layouts plan.dxf`

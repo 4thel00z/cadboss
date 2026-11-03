@@ -6,9 +6,10 @@ use cadboss_dxf::DxfDocument;
 use clap::Args;
 use jaq_core::load::{Arena, File, Loader};
 use jaq_core::{data, unwrap_valr, Compiler, Ctx, Vars};
-use jaq_json::{read, Val};
+use jaq_json::Val;
+use serde::Deserialize;
 
-use crate::commands::json::build;
+use crate::commands::json::Export;
 use crate::failure::Failure;
 
 #[derive(Args)]
@@ -63,10 +64,9 @@ fn invalid(message: String) -> Failure {
 }
 
 pub fn run(args: &QArgs, doc: &DxfDocument, out: &mut dyn Write) -> Result<Report, Failure> {
-    let (value, report) = build(doc, args.entities, args.layout.as_deref())?;
-    let text = serde_json::to_string(&value)?;
-    let input = read::parse_single(text.as_bytes())
-        .map_err(|error| Failure::input(format!("{error:?}")))?;
+    let (document, report) = doc.document_reporting();
+    let export = Export::new(doc, &document, args.entities, args.layout.as_deref());
+    let input = Val::deserialize(serde_json::to_value(&export)?)?;
     let defs = jaq_core::defs()
         .chain(jaq_std::defs())
         .chain(jaq_json::defs());

@@ -42,6 +42,9 @@ impl From<std::io::Error> for Failure {
 
 impl From<serde_json::Error> for Failure {
     fn from(error: serde_json::Error) -> Failure {
-        Failure::input(error.to_string())
+        Failure {
+            broken_pipe: error.io_error_kind() == Some(std::io::ErrorKind::BrokenPipe),
+            ..Failure::input(error.to_string())
+        }
     }
 }

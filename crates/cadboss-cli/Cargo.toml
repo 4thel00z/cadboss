@@ -19,10 +19,11 @@ cadboss-model.workspace = true
 cadboss-dxf.workspace = true
 cadboss-output.workspace = true
 clap.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 jaq-core.workspace = true
 jaq-std.workspace = true
-jaq-json.workspace = true
+jaq-json = { workspace = true, features = ["serde"] }
 
 [dev-dependencies]
 cadboss-testkit = { path = "../cadboss-testkit" }

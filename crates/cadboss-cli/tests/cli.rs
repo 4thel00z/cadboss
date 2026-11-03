@@ -230,3 +230,27 @@ fn q_reports_readable_compile_and_runtime_errors() -> TestResult {
     assert_eq!(stdout(&raw), "2\n");
     Ok(())
 }
+
+#[test]
+fn json_entities_stream_the_same_document_as_q() -> TestResult {
+    let path = fixture("multi-layout-5.dxf");
+    let streamed = cadboss(&["json", &path, "--entities", "--compact"])?;
+    let value: serde_json::Value = serde_json::from_slice(&streamed.stdout)?;
+    let entities = value
+        .get("entities")
+        .and_then(serde_json::Value::as_object)
+        .ok_or("no entities")?;
+    let names: Vec<&str> = entities.keys().map(String::as_str).collect();
+    assert_eq!(names.first(), Some(&"Model"));
+    assert_eq!(names.len(), 7);
+    let queried = cadboss(&["q", &path, "--entities", ".entities | keys | length"])?;
+    assert_eq!(stdout(&queried), "7\n");
+    let scoped = cadboss(&["json", &path, "--entities", "--layout", "Sheet2"])?;
+    let value: serde_json::Value = serde_json::from_slice(&scoped.stdout)?;
+    let only = value
+        .get("entities")
+        .and_then(serde_json::Value::as_object)
+        .ok_or("no entities")?;
+    assert_eq!(only.keys().collect::<Vec<_>>(), ["Sheet2"]);
+    Ok(())
+}

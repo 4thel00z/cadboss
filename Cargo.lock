@@ -124,6 +124,7 @@ dependencies = [
  "jaq-core",
  "jaq-json",
  "jaq-std",
+ "serde",
  "serde_json",
 ]
 
@@ -486,6 +487,7 @@ dependencies = [
  "num-traits",
  "ryu",
  "self_cell",
+ "serde_core",
 ]
 
 [[package]]
