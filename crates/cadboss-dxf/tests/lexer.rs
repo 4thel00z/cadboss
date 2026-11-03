@@ -215,15 +215,6 @@ fn lexer_rejects_input_over_the_byte_budget() {
 }
 
 #[test]
-fn binary_sentinel_is_recognized_but_unsupported_for_now() {
-    let result = Tape::lex(
-        b"AutoCAD Binary DXF\r\n\x1a\0\x00SECTION\0",
-        &Budget::default(),
-    );
-    assert!(matches!(result, Err(Error::Unsupported("binary dxf"))));
-}
-
-#[test]
 fn lexer_stops_at_the_token_budget_and_reports() {
     let bytes = b"  0\nSECTION\n  2\nHEADER\n  9\n$ACADVER\n  1\nAC1027\n  0\nENDSEC\n  0\nEOF\n";
     let budget = Budget {

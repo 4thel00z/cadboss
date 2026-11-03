@@ -2,9 +2,8 @@ use std::ops::Range;
 
 use cadboss_core::{Budget, Error, Report, Result};
 
+use crate::binary::{lex_binary, SENTINEL};
 use crate::lexer::lex_ascii;
-
-const BINARY_SENTINEL: &[u8] = b"AutoCAD Binary DXF\r\n\x1a\0";
 
 /// One group-code/value pair: the value bytes live in the input at `offset..offset + len`.
 /// A `len` of `u16::MAX` marks a value stored in `Tape::long_values`.
@@ -67,8 +66,8 @@ impl Tape {
         if bytes.is_empty() {
             return Err(Error::Empty);
         }
-        if bytes.starts_with(BINARY_SENTINEL) {
-            return Err(Error::Unsupported("binary dxf"));
+        if bytes.starts_with(SENTINEL) {
+            return lex_binary(bytes, budget);
         }
         lex_ascii(bytes, budget)
     }
@@ -179,10 +178,22 @@ impl<'t> Cursor<'t> {
     }
 
     pub fn f64(&self, value: &[u8]) -> Option<f64> {
+        if self.tape.binary {
+            return Some(f64::from_le_bytes(value.try_into().ok()?));
+        }
         std::str::from_utf8(value).ok()?.trim().parse().ok()
     }
 
     pub fn i64(&self, value: &[u8]) -> Option<i64> {
+        if self.tape.binary {
+            return match *value {
+                [byte] => Some(i64::from(byte)),
+                [a, b] => Some(i64::from(i16::from_le_bytes([a, b]))),
+                [a, b, c, d] => Some(i64::from(i32::from_le_bytes([a, b, c, d]))),
+                [a, b, c, d, e, f, g, h] => Some(i64::from_le_bytes([a, b, c, d, e, f, g, h])),
+                _ => None,
+            };
+        }
         std::str::from_utf8(value).ok()?.trim().parse().ok()
     }
 

@@ -75,17 +75,51 @@ fn looks_like_dxf(bytes: &[u8], mut pos: usize) -> bool {
     false
 }
 
-struct Builder {
+pub(crate) struct Builder {
     tokens: Vec<Token>,
     long_values: Vec<(u32, u64, u32)>,
     sections: Vec<Section>,
     open: Option<(SectionName, u32)>,
     awaiting_name: bool,
-    report: Report,
+    pub(crate) report: Report,
 }
 
 impl Builder {
-    fn push(&mut self, code: i16, offset: usize, len: usize) -> Option<u32> {
+    pub(crate) fn new(reserve: usize) -> Builder {
+        Builder {
+            tokens: Vec::with_capacity(reserve),
+            long_values: Vec::new(),
+            sections: Vec::new(),
+            open: None,
+            awaiting_name: false,
+            report: Report::default(),
+        }
+    }
+
+    pub(crate) fn at_limit(&mut self, budget: &Budget) -> bool {
+        if (self.tokens.len() as u64) < budget.max_tokens {
+            return false;
+        }
+        self.report.note(SkipKind::Token, SkipReason::TokenLimit);
+        true
+    }
+
+    pub(crate) fn finish(mut self, binary: bool) -> (Tape, Report) {
+        if self.awaiting_name {
+            self.report.note(SkipKind::Section, SkipReason::Malformed);
+        }
+        let end = u32::try_from(self.tokens.len()).unwrap_or(u32::MAX);
+        self.close(end, Some(SkipReason::Truncated));
+        let tape = Tape {
+            tokens: self.tokens,
+            long_values: self.long_values,
+            sections: self.sections,
+            binary,
+        };
+        (tape, self.report)
+    }
+
+    pub(crate) fn push(&mut self, code: i16, offset: usize, len: usize) -> Option<u32> {
         let index = u32::try_from(self.tokens.len()).ok()?;
         let inline = match (u32::try_from(offset), u16::try_from(len)) {
             (Ok(offset), Ok(len)) if len < u16::MAX => Some((offset, len)),
@@ -117,7 +151,7 @@ impl Builder {
         }
     }
 
-    fn observe(&mut self, index: u32, code: i16, value: &[u8]) -> bool {
+    pub(crate) fn observe(&mut self, index: u32, code: i16, value: &[u8]) -> bool {
         if self.awaiting_name {
             self.awaiting_name = false;
             if code == 2 {
@@ -160,18 +194,10 @@ pub(crate) fn lex_ascii(bytes: &[u8], budget: &Budget) -> Result<(Tape, Report)>
     }
     let lines = memchr::memchr_iter(b'\n', bytes).count() + 1;
     let reserve = usize::try_from(budget.max_tokens).map_or(lines / 2, |max| max.min(lines / 2));
-    let mut builder = Builder {
-        tokens: Vec::with_capacity(reserve),
-        long_values: Vec::new(),
-        sections: Vec::new(),
-        open: None,
-        awaiting_name: false,
-        report: Report::default(),
-    };
+    let mut builder = Builder::new(reserve);
     let mut previous_malformed = false;
     while let Some(code_line) = next_line(bytes, pos) {
-        if builder.tokens.len() as u64 >= budget.max_tokens {
-            builder.report.note(SkipKind::Token, SkipReason::TokenLimit);
+        if builder.at_limit(budget) {
             break;
         }
         let code_text = bytes.get(code_line.start..code_line.end).unwrap_or(&[]);
@@ -201,18 +227,5 @@ pub(crate) fn lex_ascii(bytes: &[u8], budget: &Budget) -> Result<(Tape, Report)>
             break;
         }
     }
-    if builder.awaiting_name {
-        builder
-            .report
-            .note(SkipKind::Section, SkipReason::Malformed);
-    }
-    let end = u32::try_from(builder.tokens.len()).unwrap_or(u32::MAX);
-    builder.close(end, Some(SkipReason::Truncated));
-    let tape = Tape {
-        tokens: builder.tokens,
-        long_values: builder.long_values,
-        sections: builder.sections,
-        binary: false,
-    };
-    Ok((tape, builder.report))
+    Ok(builder.finish(false))
 }
