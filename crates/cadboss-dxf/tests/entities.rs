@@ -662,3 +662,29 @@ fn polyline_vertices_inside_a_reactor_group_are_read_in_place() {
     let points = variant!(entities[0], EntityKind::Polyline { points, .. } => points);
     assert_eq!(points, &vec![Point::xy(1.0, 2.0)]);
 }
+
+#[test]
+fn non_finite_coordinates_count_as_missing() {
+    for builder in [DxfBuilder::new(), DxfBuilder::new().binary()] {
+        let bytes = builder
+            .raw(0, "LINE")
+            .raw(10, "inf")
+            .raw(20, "0")
+            .raw(11, "1")
+            .raw(21, "1")
+            .raw(0, "CIRCLE")
+            .raw(10, "0")
+            .raw(20, "0")
+            .raw(40, "NaN")
+            .raw(0, "POINT")
+            .raw(10, "1e400")
+            .raw(20, "0")
+            .raw(0, "POINT")
+            .raw(10, "-inf")
+            .raw(20, "-inf")
+            .build();
+        let (entities, report) = decode_all(&bytes).unwrap();
+        assert!(entities.is_empty());
+        assert!(only(&report, SkipKind::Entity, SkipReason::Malformed, 4));
+    }
+}

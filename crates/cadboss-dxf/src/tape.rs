@@ -122,8 +122,12 @@ impl Tape {
         self.sections.iter().find(|section| section.name == name)
     }
 
-    /// Decodes a numeric value: fixed-width little-endian bytes when the tape is binary, text otherwise.
+    /// Decodes a numeric value: fixed-width little-endian bytes when the tape is binary, text otherwise; infinities and NaN count as missing.
     pub(crate) fn f64(&self, value: &[u8]) -> Option<f64> {
+        self.float(value).filter(|number| number.is_finite())
+    }
+
+    fn float(&self, value: &[u8]) -> Option<f64> {
         if self.binary {
             return Some(f64::from_le_bytes(value.try_into().ok()?));
         }
@@ -219,7 +223,7 @@ impl<'t> Cursor<'t> {
         }
     }
 
-    /// Decodes a numeric value: fixed-width little-endian bytes when the tape is binary, text otherwise.
+    /// Decodes a numeric value: fixed-width little-endian bytes when the tape is binary, text otherwise; infinities and NaN count as missing.
     pub fn f64(&self, value: &[u8]) -> Option<f64> {
         self.tape.f64(value)
     }
