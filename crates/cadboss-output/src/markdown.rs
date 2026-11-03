@@ -170,8 +170,14 @@ pub fn format_number(value: f64) -> String {
     }
 }
 
+const MAX_DATE_DAYS: f64 = 1.0e8;
+
 fn date(julian_day: f64) -> String {
-    let days = (julian_day - 2_440_587.5).floor() as i64;
+    let offset = julian_day - 2_440_587.5;
+    if !offset.is_finite() || offset.abs() > MAX_DATE_DAYS {
+        return format!("JD {julian_day}");
+    }
+    let days = offset.floor() as i64;
     let (year, month, day) = civil_from_days(days);
     format!("{year:04}-{month:02}-{day:02}")
 }
@@ -206,6 +212,13 @@ mod tests {
     #[test]
     fn julian_day_2460371_5_is_the_second_of_march_2024() {
         assert_eq!(date(2_460_371.5), "2024-03-02");
+    }
+
+    #[test]
+    fn out_of_range_julian_days_are_printed_as_numbers() {
+        assert_eq!(date(f64::MAX), format!("JD {}", f64::MAX));
+        assert_eq!(date(f64::NAN), "JD NaN");
+        assert_eq!(date(-1.0e300), format!("JD {}", -1.0e300));
     }
 
     #[test]
