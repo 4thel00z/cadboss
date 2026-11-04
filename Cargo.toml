@@ -1,5 +1,6 @@
 [workspace]
 resolver = "2"
+exclude = ["fuzz"]
 members = [
     "crates/cadboss-core",
     "crates/cadboss-model",
@@ -23,7 +24,6 @@ cadboss-core = { path = "crates/cadboss-core", version = "0.1.0" } # x-release-p
 cadboss-model = { path = "crates/cadboss-model", version = "0.1.0" } # x-release-please-version
 cadboss-dxf = { path = "crates/cadboss-dxf", version = "0.1.0" } # x-release-please-version
 cadboss-output = { path = "crates/cadboss-output", version = "0.1.0" } # x-release-please-version
-cadboss-testkit = { path = "crates/cadboss-testkit", version = "0.1.0" } # x-release-please-version
 thiserror = "2"
 memmap2 = "0.9"
 memchr = "2.8"
@@ -32,11 +32,10 @@ serde_json = { version = "1", features = ["preserve_order"] }
 clap = { version = "4.6", features = ["derive"] }
 jaq-core = "3"
 jaq-std = "3"
+jaq-json = "2"
 pyo3 = { version = "0.25", features = ["abi3-py312"] }
+toml = "0.8"
 criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
-
-[workspace.lints.rust]
-unsafe_code = "deny"
 
 [workspace.lints.clippy]
 unwrap_used = "deny"

@@ -13,3 +13,13 @@ workspace = true
 [dependencies]
 cadboss-core.workspace = true
 cadboss-model.workspace = true
+memchr = { workspace = true }
+
+[dev-dependencies]
+cadboss-testkit = { path = "../cadboss-testkit" }
+criterion = { workspace = true }
+toml = { workspace = true }
+
+[[bench]]
+name = "dxf"
+harness = false

@@ -1,0 +1,672 @@
+//! On-demand decoding of entity records into model entities.
+
+use std::f64::consts::TAU;
+
+use cadboss_core::{Budget, Point, Report, SkipKind, SkipReason};
+use cadboss_model::{Attribute, Entity, EntityCommon, EntityKind, Text};
+
+use crate::codepage::{decode, decode_unescaped, Codepage};
+use crate::mtext::strip_mtext;
+use crate::record::{Record, Records};
+use crate::tape::Cursor;
+
+const BY_LAYER: i16 = 256;
+const CLOSED: i64 = 1;
+const DIMENSION_TYPE_MASK: i64 = 0x0F;
+const POLYFACE_FACE: i64 = 128;
+const POLYFACE_VERTEX: i64 = 64;
+const DEFAULT_SPLINE_DEGREE: u16 = 3;
+
+type LayoutOf<'t> = &'t dyn Fn(Option<u64>, bool) -> Text;
+type Decode = fn(Codepage, &[u8], &mut Report) -> Text;
+
+/// Yields one entity per code-0 record of the cursor range, consuming the VERTEX or ATTRIB records and SEQEND that belong to it.
+/// Strings are decoded first and then cut to `Budget::max_string_bytes` on a character boundary.
+pub struct EntityDecoder<'t> {
+    cursor: Cursor<'t>,
+    cp: Codepage,
+    budget: &'t Budget,
+    layout_of: LayoutOf<'t>,
+    decoded: u64,
+    report: Report,
+    done: bool,
+    layout_filter: Option<Text>,
+    starts: Option<std::slice::Iter<'t, u32>>,
+}
+
+impl<'t> EntityDecoder<'t> {
+    pub fn new(
+        cursor: Cursor<'t>,
+        cp: Codepage,
+        budget: &'t Budget,
+        layout_of: LayoutOf<'t>,
+    ) -> EntityDecoder<'t> {
+        EntityDecoder {
+            cursor,
+            cp,
+            budget,
+            layout_of,
+            decoded: 0,
+            report: Report::default(),
+            done: false,
+            layout_filter: None,
+            starts: None,
+        }
+    }
+
+    /// Decodes only the records whose code-0 tokens sit at `starts`, in order, instead of every record of the range.
+    pub(crate) fn at(mut self, starts: &'t [u32]) -> EntityDecoder<'t> {
+        self.starts = Some(starts.iter());
+        self
+    }
+
+    /// Walks every record of the range without building entities and hands each record's start, owner handle and paper-space flag to `sink`.
+    /// Records are grouped exactly as decoding groups them; stray VERTEX, ATTRIB and SEQEND records are noted as malformed.
+    pub(crate) fn skim(mut self, sink: &mut dyn FnMut(u32, Option<u64>, bool)) -> Report {
+        while let Some((start, name)) = self.next_name() {
+            if is_child(name) {
+                self.report.note(SkipKind::Entity, SkipReason::Malformed);
+                continue;
+            }
+            let head = Record::until(&mut self.cursor, 0);
+            self.children(name, &head);
+            let owner = head.first(330).and_then(|value| head.handle(value));
+            let paper = head.first(67).and_then(|value| head.i64(value)) == Some(1);
+            sink(start, owner, paper);
+        }
+        self.report
+    }
+
+    fn next_name(&mut self) -> Option<(u32, &'t [u8])> {
+        if let Some(starts) = &mut self.starts {
+            let start = *starts.next()?;
+            self.cursor.seek(start);
+        }
+        self.cursor.skip_to_code_zero();
+        let start = self.cursor.index();
+        let (_, name) = self.cursor.next()?;
+        Some((start, name))
+    }
+
+    /// Skips entities whose resolved layout differs from `name`; skipped entities do not count toward the budget.
+    pub fn only_layout(mut self, name: Text) -> EntityDecoder<'t> {
+        self.layout_filter = Some(name);
+        self
+    }
+
+    pub fn report(&self) -> &Report {
+        &self.report
+    }
+
+    pub fn into_report(self) -> Report {
+        self.report
+    }
+
+    fn decode_record(&mut self, name: &'t [u8]) -> Option<Entity> {
+        let head = Record::until(&mut self.cursor, 0);
+        let children = self.children(name, &head);
+        let mut fields = Fields {
+            record: head,
+            cp: self.cp,
+            max_string: usize::try_from(self.budget.max_string_bytes).unwrap_or(usize::MAX),
+            report: &mut self.report,
+        };
+        if let Some(filter) = &self.layout_filter {
+            let layout = (self.layout_of)(fields.handle(330), fields.int(67) == Some(1));
+            if layout != *filter {
+                return None;
+            }
+        }
+        let Some(kind) = build(&mut fields, children, name) else {
+            fields.report.note(SkipKind::Entity, SkipReason::Malformed);
+            return None;
+        };
+        let common = fields.common(self.layout_of);
+        if matches!(kind, EntityKind::Unknown { .. }) {
+            fields.report.note(SkipKind::Entity, SkipReason::Unknown);
+        }
+        Some(Entity { common, kind })
+    }
+
+    /// Consumes the VERTEX or ATTRIB records and the SEQEND that belong to the record and returns them in place.
+    fn children(&mut self, name: &[u8], head: &Record<'t>) -> Records<'t> {
+        let start = self.cursor.index();
+        if self.has_children(name, head) {
+            self.skip_children();
+        }
+        Records::new(
+            self.cursor.tape(),
+            self.cursor.bytes(),
+            start..self.cursor.index(),
+        )
+    }
+
+    fn has_children(&self, name: &[u8], head: &Record<'t>) -> bool {
+        if name == b"POLYLINE" {
+            return true;
+        }
+        if name != b"INSERT" {
+            return false;
+        }
+        let announced = head.first(66).and_then(|value| head.i64(value)) == Some(1);
+        announced || matches!(self.cursor.peek(), Some((0, b"ATTRIB")))
+    }
+
+    fn skip_children(&mut self) {
+        while let Some((0, name)) = self.cursor.peek() {
+            if !is_child(name) {
+                return;
+            }
+            self.cursor.next();
+            self.cursor.skip_to_code_zero();
+            if name == b"SEQEND" {
+                return;
+            }
+        }
+    }
+}
+
+impl<'t> Iterator for EntityDecoder<'t> {
+    type Item = Entity;
+
+    fn next(&mut self) -> Option<Entity> {
+        while !self.done {
+            let (_, name) = self.next_name()?;
+            if is_child(name) {
+                self.report.note(SkipKind::Entity, SkipReason::Malformed);
+                continue;
+            }
+            if self.decoded >= self.budget.max_entities {
+                self.report.note(SkipKind::Entity, SkipReason::EntityLimit);
+                self.done = true;
+                return None;
+            }
+            let Some(entity) = self.decode_record(name) else {
+                continue;
+            };
+            self.decoded += 1;
+            return Some(entity);
+        }
+        None
+    }
+}
+
+fn stripped(text: Text) -> Text {
+    let Text::Str(text) = text else {
+        return text;
+    };
+    Text::Str(strip_mtext(&text))
+}
+
+fn is_child(name: &[u8]) -> bool {
+    matches!(name, b"VERTEX" | b"ATTRIB" | b"SEQEND")
+}
+
+struct Fields<'a, 't> {
+    record: Record<'t>,
+    cp: Codepage,
+    max_string: usize,
+    report: &'a mut Report,
+}
+
+impl<'t> Fields<'_, 't> {
+    fn over(&mut self, record: Record<'t>) -> Fields<'_, 't> {
+        Fields {
+            record,
+            cp: self.cp,
+            max_string: self.max_string,
+            report: &mut *self.report,
+        }
+    }
+
+    fn raw(&self, code: i16) -> Option<&'t [u8]> {
+        self.record.first(code)
+    }
+
+    fn float(&self, code: i16) -> Option<f64> {
+        self.record.f64(self.raw(code)?)
+    }
+
+    fn int(&self, code: i16) -> Option<i64> {
+        self.record.i64(self.raw(code)?)
+    }
+
+    fn closed(&self) -> bool {
+        self.int(70).is_some_and(|flags| flags & CLOSED != 0)
+    }
+
+    fn handle(&self, code: i16) -> Option<u64> {
+        self.record.handle(self.raw(code)?)
+    }
+
+    fn point(&self, code: i16) -> Option<Point> {
+        let x = self.float(code)?;
+        let y = self.float(code + 10)?;
+        Some(Point::new(x, y, self.float(code + 20).unwrap_or(0.0)))
+    }
+
+    fn points(&mut self, code: i16) -> Vec<Point> {
+        let mut points: Vec<Point> = Vec::new();
+        let mut skipping = false;
+        let record = self.record;
+        for (candidate, value) in record.pairs() {
+            let Some(offset) = candidate
+                .checked_sub(code)
+                .filter(|offset| matches!(offset, 0 | 10 | 20))
+            else {
+                continue;
+            };
+            match (offset, record.f64(value)) {
+                (0, Some(x)) => {
+                    skipping = false;
+                    points.push(Point::new(x, 0.0, 0.0));
+                }
+                (0, None) => {
+                    skipping = true;
+                    self.report.note(SkipKind::Entity, SkipReason::Malformed);
+                }
+                (_, _) if skipping => {}
+                (10, Some(y)) => {
+                    if let Some(last) = points.last_mut() {
+                        last.y = y;
+                    }
+                }
+                (_, Some(z)) => {
+                    if let Some(last) = points.last_mut() {
+                        last.z = z;
+                    }
+                }
+                (_, None) => self.report.note(SkipKind::Entity, SkipReason::Malformed),
+            }
+        }
+        points
+    }
+
+    fn cut_len(&self, raw: &[u8]) -> usize {
+        if raw.len() <= self.max_string || self.cp != Codepage::Utf8 {
+            return raw.len().min(self.max_string);
+        }
+        (0..=self.max_string)
+            .rev()
+            .find(|at| raw.get(*at).is_none_or(|byte| byte & 0xC0 != 0x80))
+            .unwrap_or(0)
+    }
+
+    fn finish(&mut self, text: Text, cut: bool) -> Text {
+        let (text, cut) = match text {
+            Text::Str(mut text) => {
+                let excess = text.len() > self.max_string;
+                if excess {
+                    let at = (0..=self.max_string)
+                        .rev()
+                        .find(|at| text.is_char_boundary(*at))
+                        .unwrap_or(0);
+                    text.truncate(at);
+                }
+                text.shrink_to_fit();
+                (Text::Str(text), cut || excess)
+            }
+            Text::Bytes(mut bytes) => {
+                let excess = bytes.len() > self.max_string;
+                bytes.truncate(self.max_string);
+                bytes.shrink_to_fit();
+                (Text::Bytes(bytes), cut || excess)
+            }
+        };
+        if cut {
+            self.report.note(SkipKind::Text, SkipReason::StringLimit);
+        }
+        text
+    }
+
+    fn string(&mut self, raw: &[u8], decoder: Decode) -> Text {
+        let keep = self.cut_len(raw);
+        let cut = keep < raw.len();
+        let text = decoder(self.cp, raw.get(..keep).unwrap_or(raw), self.report);
+        self.finish(text, cut)
+    }
+
+    fn text(&mut self, code: i16) -> Option<Text> {
+        let raw = self.raw(code)?;
+        Some(self.string(raw, decode))
+    }
+
+    fn text_unescaped(&mut self, code: i16) -> Option<Text> {
+        let raw = self.raw(code)?;
+        Some(self.string(raw, decode_unescaped))
+    }
+
+    fn mtext(&mut self) -> Text {
+        let mut joined: Vec<u8> = Vec::new();
+        let mut cut = false;
+        let record = self.record;
+        let chunks = record
+            .pairs()
+            .filter(|(code, _)| *code == 3)
+            .chain(record.pairs().filter(|(code, _)| *code == 1));
+        for (_, value) in chunks {
+            let room = self.max_string.saturating_sub(joined.len());
+            cut |= value.len() > room;
+            joined.extend_from_slice(value.get(..room.min(value.len())).unwrap_or(&[]));
+        }
+        if cut && self.cp == Codepage::Utf8 {
+            if let Err(error) = std::str::from_utf8(&joined) {
+                if error.error_len().is_none() {
+                    joined.truncate(error.valid_up_to());
+                }
+            }
+        }
+        let text = stripped(decode(self.cp, &joined, self.report));
+        self.finish(text, cut)
+    }
+
+    /// A single string value carrying MTEXT formatting codes, cut to the string budget and stripped.
+    fn formatted(&mut self, code: i16) -> Option<Text> {
+        let raw = self.raw(code)?;
+        let keep = self.cut_len(raw);
+        let cut = keep < raw.len();
+        let text = stripped(decode(self.cp, raw.get(..keep).unwrap_or(raw), self.report));
+        Some(self.finish(text, cut))
+    }
+
+    fn hyperlink(&mut self) -> Option<Text> {
+        let mut pairs = self.record.pairs();
+        pairs.find(|(code, value)| *code == 1001 && *value == b"PE_URL")?;
+        let raw = pairs
+            .take_while(|(code, _)| *code != 1001)
+            .find(|(code, _)| *code == 1000)
+            .map(|(_, value)| value)?;
+        Some(self.string(raw, decode))
+    }
+
+    fn common(&mut self, layout_of: LayoutOf) -> EntityCommon {
+        let owner = self.handle(330);
+        let paper = self.int(67) == Some(1);
+        EntityCommon {
+            handle: self.handle(5),
+            layer: self.text(8).unwrap_or_else(|| Text::from("0")),
+            layout: layout_of(owner, paper),
+            color: self
+                .int(62)
+                .and_then(|color| i16::try_from(color).ok())
+                .unwrap_or(BY_LAYER),
+            hyperlink: self.hyperlink(),
+        }
+    }
+}
+
+fn build<'t>(
+    fields: &mut Fields<'_, 't>,
+    children: Records<'t>,
+    name: &[u8],
+) -> Option<EntityKind> {
+    match name {
+        b"LINE" => line(fields),
+        b"CIRCLE" => circle(fields),
+        b"ARC" => arc(fields),
+        b"ELLIPSE" => ellipse(fields),
+        b"POINT" => point(fields),
+        b"SOLID" => solid(fields),
+        b"LEADER" => Some(leader(fields)),
+        b"LWPOLYLINE" => Some(lwpolyline(fields)),
+        b"POLYLINE" => Some(polyline(fields, children)),
+        b"SPLINE" => Some(spline(fields)),
+        b"HATCH" => Some(hatch(fields)),
+        b"TEXT" => text(fields),
+        b"MTEXT" => mtext(fields),
+        b"DIMENSION" => Some(dimension(fields)),
+        b"INSERT" => insert(fields, children),
+        b"IMAGE" => image(fields),
+        b"VIEWPORT" => viewport(fields),
+        other => Some(unknown(fields, other)),
+    }
+}
+
+fn unknown(fields: &mut Fields, name: &[u8]) -> EntityKind {
+    EntityKind::Unknown {
+        type_name: fields.string(name, decode),
+    }
+}
+
+fn line(fields: &Fields) -> Option<EntityKind> {
+    Some(EntityKind::Line {
+        start: fields.point(10)?,
+        end: fields.point(11)?,
+    })
+}
+
+fn circle(fields: &Fields) -> Option<EntityKind> {
+    Some(EntityKind::Circle {
+        center: fields.point(10)?,
+        radius: fields.float(40)?,
+    })
+}
+
+fn arc(fields: &Fields) -> Option<EntityKind> {
+    Some(EntityKind::Arc {
+        center: fields.point(10)?,
+        radius: fields.float(40)?,
+        start: fields.float(50)?,
+        end: fields.float(51)?,
+    })
+}
+
+fn ellipse(fields: &Fields) -> Option<EntityKind> {
+    Some(EntityKind::Ellipse {
+        center: fields.point(10)?,
+        major: fields.point(11)?,
+        ratio: fields.float(40)?,
+        start: fields.float(41).unwrap_or(0.0),
+        end: fields.float(42).unwrap_or(TAU),
+    })
+}
+
+fn point(fields: &Fields) -> Option<EntityKind> {
+    Some(EntityKind::Point {
+        position: fields.point(10)?,
+    })
+}
+
+fn solid(fields: &Fields) -> Option<EntityKind> {
+    let corners = [10, 11, 12, 13].map(|code| fields.point(code));
+    let [Some(a), Some(b), Some(c), fourth] = corners else {
+        return None;
+    };
+    let points = [Some(a), Some(b), Some(c), fourth]
+        .into_iter()
+        .flatten()
+        .collect();
+    Some(EntityKind::Solid { points })
+}
+
+fn leader(fields: &mut Fields) -> EntityKind {
+    EntityKind::Leader {
+        text: None,
+        points: fields.points(10),
+    }
+}
+
+fn lwpolyline(fields: &mut Fields) -> EntityKind {
+    let record = fields.record;
+    let announced = fields
+        .int(90)
+        .and_then(|count| usize::try_from(count).ok())
+        .unwrap_or(0);
+    let capacity = announced.min(record.len() as usize / 2);
+    let mut points: Vec<Point> = Vec::with_capacity(capacity);
+    let mut bulges: Vec<f64> = Vec::with_capacity(capacity);
+    let mut skipping = false;
+    for (code, value) in record.pairs() {
+        match (code, record.f64(value)) {
+            (10, Some(x)) => {
+                skipping = false;
+                points.push(Point::new(x, 0.0, 0.0));
+                bulges.push(0.0);
+            }
+            (10, None) => {
+                skipping = true;
+                fields.report.note(SkipKind::Entity, SkipReason::Malformed);
+            }
+            (20 | 42, _) if skipping => {}
+            (20, Some(y)) => {
+                if let Some(last) = points.last_mut() {
+                    last.y = y;
+                }
+            }
+            (42, Some(bulge)) => {
+                if let Some(last) = bulges.last_mut() {
+                    *last = bulge;
+                }
+            }
+            (20 | 42, None) => fields.report.note(SkipKind::Entity, SkipReason::Malformed),
+            _ => {}
+        }
+    }
+    EntityKind::Polyline {
+        points,
+        bulges,
+        closed: fields.closed(),
+        lightweight: true,
+    }
+}
+
+fn polyline<'t>(fields: &mut Fields<'_, 't>, children: Records<'t>) -> EntityKind {
+    let mut points = Vec::new();
+    let mut bulges = Vec::new();
+    for (_, record) in children.filter(|(name, _)| *name == b"VERTEX") {
+        let vertex = fields.over(record);
+        let flags = vertex.int(70).unwrap_or(0);
+        if flags & POLYFACE_FACE != 0 && flags & POLYFACE_VERTEX == 0 {
+            continue;
+        }
+        let Some(point) = vertex.point(10) else {
+            continue;
+        };
+        points.push(point);
+        bulges.push(vertex.float(42).unwrap_or(0.0));
+    }
+    EntityKind::Polyline {
+        points,
+        bulges,
+        closed: fields.closed(),
+        lightweight: false,
+    }
+}
+
+fn spline(fields: &mut Fields) -> EntityKind {
+    EntityKind::Spline {
+        control: fields.points(10),
+        fit: fields.points(11),
+        degree: fields
+            .int(71)
+            .and_then(|degree| u16::try_from(degree).ok())
+            .unwrap_or(DEFAULT_SPLINE_DEGREE),
+        closed: fields.closed(),
+    }
+}
+
+fn hatch(fields: &mut Fields) -> EntityKind {
+    EntityKind::Hatch {
+        pattern: fields.text(2).unwrap_or_default(),
+        solid: fields.int(70) == Some(1),
+        loops: fields
+            .int(91)
+            .and_then(|loops| u32::try_from(loops).ok())
+            .unwrap_or(0),
+    }
+}
+
+fn text(fields: &mut Fields) -> Option<EntityKind> {
+    let position = fields.point(10)?;
+    Some(EntityKind::Text {
+        text: fields.text_unescaped(1).unwrap_or_default(),
+        position,
+        height: fields.float(40).unwrap_or(0.0),
+        rotation: fields.float(50).unwrap_or(0.0),
+        style: fields.text(7).unwrap_or_else(|| Text::from("Standard")),
+    })
+}
+
+fn mtext(fields: &mut Fields) -> Option<EntityKind> {
+    let position = fields.point(10)?;
+    Some(EntityKind::MText {
+        text: fields.mtext(),
+        position,
+        height: fields.float(40).unwrap_or(0.0),
+        width: fields.float(41).unwrap_or(0.0),
+        rotation: fields.float(50).unwrap_or(0.0),
+        style: fields.text(7).unwrap_or_else(|| Text::from("Standard")),
+    })
+}
+
+fn dimension(fields: &mut Fields) -> EntityKind {
+    EntityKind::Dimension {
+        text: fields.formatted(1).unwrap_or_default(),
+        measurement: fields.float(42),
+        text_position: fields.point(11),
+        dim_type: fields
+            .int(70)
+            .and_then(|kind| u16::try_from(kind & DIMENSION_TYPE_MASK).ok())
+            .unwrap_or(0),
+        block_name: fields.text(2).unwrap_or_default(),
+        style: fields.text(3).unwrap_or_default(),
+    }
+}
+
+fn insert<'t>(fields: &mut Fields<'_, 't>, children: Records<'t>) -> Option<EntityKind> {
+    let block_name = fields.text(2)?;
+    let position = fields.point(10)?;
+    let mut attributes = Vec::new();
+    for (_, record) in children.filter(|(name, _)| *name == b"ATTRIB") {
+        let mut attrib = fields.over(record);
+        let Some(tag) = attrib.text(2) else {
+            attrib.report.note(SkipKind::Entity, SkipReason::Malformed);
+            continue;
+        };
+        attributes.push(Attribute {
+            tag,
+            value: attrib.text_unescaped(1).unwrap_or_default(),
+            position: attrib.point(10).unwrap_or_default(),
+            height: attrib.float(40).unwrap_or(0.0),
+        });
+    }
+    Some(EntityKind::Insert {
+        block_name,
+        position,
+        scale: Point::new(
+            fields.float(41).unwrap_or(1.0),
+            fields.float(42).unwrap_or(1.0),
+            fields.float(43).unwrap_or(1.0),
+        ),
+        rotation: fields.float(50).unwrap_or(0.0),
+        attributes,
+    })
+}
+
+fn image(fields: &Fields) -> Option<EntityKind> {
+    let size = fields.point(13)?;
+    Some(EntityKind::Image {
+        path: None,
+        image_def: fields.handle(340),
+        position: fields.point(10)?,
+        size: Point::new(size.x, size.y, 0.0),
+    })
+}
+
+fn viewport(fields: &Fields) -> Option<EntityKind> {
+    let record = fields.record;
+    let frozen_layers = record
+        .pairs()
+        .filter(|(code, _)| *code == 331)
+        .filter_map(|(_, value)| record.handle(value))
+        .map(|handle| Text::from(format!("{handle:X}")))
+        .collect();
+    Some(EntityKind::Viewport {
+        center: fields.point(10)?,
+        width: fields.float(40)?,
+        height: fields.float(41)?,
+        view_center: fields.point(12).unwrap_or_default(),
+        view_height: fields.float(45).unwrap_or(0.0),
+        frozen_layers,
+    })
+}

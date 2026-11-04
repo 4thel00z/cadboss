@@ -12,3 +12,7 @@ workspace = true
 
 [dependencies]
 
+
+[dev-dependencies]
+cadboss-core = { path = "../cadboss-core" }
+cadboss-dxf = { path = "../cadboss-dxf" }

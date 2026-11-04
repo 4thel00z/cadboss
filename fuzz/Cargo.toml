@@ -1,0 +1,22 @@
+[package]
+name = "cadboss-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+cadboss-dxf = { path = "../crates/cadboss-dxf" }
+cadboss-output = { path = "../crates/cadboss-output" }
+
+[[bin]]
+name = "dxf_load"
+path = "fuzz_targets/dxf_load.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]

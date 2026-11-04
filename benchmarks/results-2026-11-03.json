@@ -1,0 +1,34 @@
+{
+  "runs": [
+    {
+      "benchmark": "cli-text",
+      "entities": 1700000,
+      "input_bytes": 300589943,
+      "peak_rss_bytes": 528498688,
+      "anonymous_bytes": 227908745,
+      "anonymous_ratio": 0.758,
+      "rss_ratio": 1.758,
+      "anonymous_gate": 1.0,
+      "rss_gate": 2.0,
+      "seconds": 1.32
+    },
+    {
+      "benchmark": "py-open-markdown",
+      "entities": 1700000,
+      "input_bytes": 300589943,
+      "peak_rss_bytes": 560922624,
+      "anonymous_bytes": 560922624,
+      "anonymous_ratio": 1.866,
+      "rss_ratio": 1.866,
+      "anonymous_gate": 2.0,
+      "rss_gate": 2.5,
+      "seconds": 1.4
+    }
+  ],
+  "hardware": {
+    "os": "Darwin 27.0.0",
+    "arch": "arm64",
+    "cpu": "Apple M3 Pro",
+    "memory_bytes": 38654705664
+  }
+}

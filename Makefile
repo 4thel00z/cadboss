@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: build release fmt fmt-check lint test ci develop test-py wheel doc bench samples fuzz help
+.PHONY: build release fmt fmt-check lint test ci package develop test-py wheel doc bench samples fuzz help
 
 ##@ Build
 
@@ -26,7 +26,10 @@ test: ## Run the Rust test suite
 doc: ## Build API docs with warnings denied
 	RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
 
-ci: fmt-check lint test doc ## Run every check CI runs
+ci: fmt-check lint test doc ## Run the fmt, lint, test and doc checks of CI
+
+package: ## Package and build every published crate the way crates.io receives it
+	cargo package --workspace --exclude cadboss-py --exclude cadboss-testkit
 
 ##@ Python
 
@@ -44,11 +47,18 @@ wheel: ## Build a release wheel
 bench: ## Run benchmarks
 	cargo bench --workspace
 
-samples: ## Fetch sample drawings (not yet implemented)
-	@echo "not yet"
+samples: ## Download and verify the public sample drawings
+	uv run python scripts/samples.py
 
-fuzz: ## Run fuzz targets (not yet implemented)
-	@echo "not yet"
+FUZZ_SECONDS ?= 60
+
+fuzz: ## Run the DXF fuzz target seeded from tests/fixtures (FUZZ_SECONDS, default 60); skips without nightly and cargo-fuzz
+	@if rustup toolchain list | grep -q nightly && cargo fuzz --version >/dev/null 2>&1; then \
+		mkdir -p fuzz/corpus/dxf_load && cp tests/fixtures/*.dxf fuzz/corpus/dxf_load/ && \
+		cargo +nightly fuzz run dxf_load -- -max_total_time=$(FUZZ_SECONDS) -timeout=10 -rss_limit_mb=1024; \
+	else \
+		echo "fuzz skipped: needs a nightly toolchain and cargo-fuzz"; \
+	fi
 
 ##@ Help
 

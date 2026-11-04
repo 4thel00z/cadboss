@@ -1,6 +1,6 @@
 [package]
 name = "cadboss-output"
-description = "Text, JSON and rendering output for cadboss models"
+description = "JSON and Markdown output for cadboss models"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,3 +12,10 @@ workspace = true
 
 [dependencies]
 cadboss-model.workspace = true
+cadboss-core.workspace = true
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+cadboss-dxf.workspace = true
+cadboss-testkit = { path = "../cadboss-testkit" }

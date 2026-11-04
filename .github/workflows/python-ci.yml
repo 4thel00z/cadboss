@@ -1,0 +1,39 @@
+name: python-ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync
+      - run: uv run maturin develop
+      - run: uv run pytest tests -q
+      - run: uv run maturin build --release --out dist
+      - run: |
+          uv venv .wheel-venv
+          uv pip install --python .wheel-venv/bin/python dist/*.whl
+      - working-directory: ${{ runner.temp }}
+        run: |
+          "$GITHUB_WORKSPACE/.wheel-venv/bin/python" -c "
+          import cadboss
+          try:
+              cadboss.Document.load(b'garbage')
+          except cadboss.CadError:
+              pass
+          else:
+              raise SystemExit('expected CadError')
+          "

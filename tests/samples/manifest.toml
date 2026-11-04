@@ -1,0 +1,59 @@
+[[sample]]
+name = "ASCII_R12.dxf"
+url = "https://raw.githubusercontent.com/mozman/ezdxf/c498560bb491c357deda538360ed0c8fdb11f5a7/integration_tests/data/ASCII_R12.dxf"
+sha256 = "b476d3e53fe24c1db3c701d20b2bebd774f7bd7966b12d81891505b9b29e4d21"
+license = "MIT"
+license_url = "https://raw.githubusercontent.com/mozman/ezdxf/c498560bb491c357deda538360ed0c8fdb11f5a7/LICENSE"
+format = "dxf"
+version = "AC1009"
+has_text = true
+
+[[sample]]
+name = "mtext_columns_R2000.dxf"
+url = "https://raw.githubusercontent.com/mozman/ezdxf/c498560bb491c357deda538360ed0c8fdb11f5a7/examples_dxf/mtext_columns_R2000.dxf"
+sha256 = "6981bc669929bd1e626ffb4846f05dc37b7444160abda796d753496630adee5b"
+license = "MIT"
+license_url = "https://raw.githubusercontent.com/mozman/ezdxf/c498560bb491c357deda538360ed0c8fdb11f5a7/LICENSE"
+format = "dxf"
+version = "AC1015"
+has_text = true
+
+[[sample]]
+name = "text_alignments.dxf"
+url = "https://raw.githubusercontent.com/mozman/ezdxf/c498560bb491c357deda538360ed0c8fdb11f5a7/examples_dxf/text_alignments.dxf"
+sha256 = "cacf3083c17c8d3836c23c6356edcb6f70db2949ed61875c2572911719a61353"
+license = "MIT"
+license_url = "https://raw.githubusercontent.com/mozman/ezdxf/c498560bb491c357deda538360ed0c8fdb11f5a7/LICENSE"
+format = "dxf"
+version = "AC1018"
+has_text = true
+
+[[sample]]
+name = "mtext_columns_R2007.dxf"
+url = "https://raw.githubusercontent.com/mozman/ezdxf/c498560bb491c357deda538360ed0c8fdb11f5a7/examples_dxf/mtext_columns_R2007.dxf"
+sha256 = "f0a04b0072986e6623eb9caf2562ef3064ef88ba1f9015724f856fd6937ab2e9"
+license = "MIT"
+license_url = "https://raw.githubusercontent.com/mozman/ezdxf/c498560bb491c357deda538360ed0c8fdb11f5a7/LICENSE"
+format = "dxf"
+version = "AC1021"
+has_text = true
+
+[[sample]]
+name = "valid_lineweights.dxf"
+url = "https://raw.githubusercontent.com/mozman/ezdxf/c498560bb491c357deda538360ed0c8fdb11f5a7/examples_dxf/valid_lineweights.dxf"
+sha256 = "d94201194185d1511416abe43c3bc679ba8c7bf99a8dd43cd96c4ce46c38fc61"
+license = "MIT"
+license_url = "https://raw.githubusercontent.com/mozman/ezdxf/c498560bb491c357deda538360ed0c8fdb11f5a7/LICENSE"
+format = "dxf"
+version = "AC1027"
+has_text = true
+
+[[sample]]
+name = "columns_R2018.dxf"
+url = "https://raw.githubusercontent.com/mozman/ezdxf/c498560bb491c357deda538360ed0c8fdb11f5a7/examples_dxf/columns_R2018.dxf"
+sha256 = "0110c42731224a851baca4fd93209a40ebcd19b18d98e75201715d3cd3baa649"
+license = "MIT"
+license_url = "https://raw.githubusercontent.com/mozman/ezdxf/c498560bb491c357deda538360ed0c8fdb11f5a7/LICENSE"
+format = "dxf"
+version = "AC1032"
+has_text = true
