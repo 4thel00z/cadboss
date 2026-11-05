@@ -148,7 +148,7 @@ checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
 name = "cadboss-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cadboss-core",
  "cadboss-dxf",
@@ -167,7 +167,7 @@ dependencies = [
 
 [[package]]
 name = "cadboss-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "memmap2",
  "serde",
@@ -176,7 +176,7 @@ dependencies = [
 
 [[package]]
 name = "cadboss-dxf"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cadboss-core",
  "cadboss-model",
@@ -188,7 +188,7 @@ dependencies = [
 
 [[package]]
 name = "cadboss-model"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cadboss-core",
  "serde",
@@ -197,7 +197,7 @@ dependencies = [
 
 [[package]]
 name = "cadboss-output"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cadboss-core",
  "cadboss-dxf",
@@ -209,7 +209,7 @@ dependencies = [
 
 [[package]]
 name = "cadboss-py"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cadboss-core",
  "cadboss-dxf",
@@ -220,7 +220,7 @@ dependencies = [
 
 [[package]]
 name = "cadboss-testkit"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cadboss-core",
  "cadboss-dxf",
@@ -228,7 +228,7 @@ dependencies = [
 
 [[package]]
 name = "cadboss-tui"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "arboard",
  "base64 0.23.1",
