@@ -1,12 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="640" height="160" viewBox="0 0 640 160">
-  <g fill="none" stroke="#1c5cab" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
-    <rect x="24" y="24" width="136" height="112" rx="10"/>
-    <circle cx="64" cy="68" r="20"/>
-    <path d="M84 68 H150"/>
-    <path d="M64 88 V136"/>
+  <g fill="none" stroke="#1c5cab" stroke-width="13" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M92 36 L46 138"/>
+    <path d="M92 36 L138 138"/>
+    <path d="M92 36 V16"/>
   </g>
-  <rect x="100" y="98" width="60" height="38" rx="4" fill="#eb6834"/>
-  <rect x="108" y="108" width="34" height="6" rx="3" fill="#fcfcfb"/>
-  <rect x="108" y="120" width="22" height="6" rx="3" fill="#fcfcfb"/>
+  <path d="M38 118 Q92 84 146 118" fill="none" stroke="#eb6834" stroke-width="11" stroke-linecap="round"/>
+  <circle cx="92" cy="36" r="13" fill="#eb6834"/>
   <text x="190" y="104" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="78" font-weight="700" fill="#0b0b0b" letter-spacing="-2">cad<tspan fill="#eb6834">boss</tspan></text>
 </svg>
