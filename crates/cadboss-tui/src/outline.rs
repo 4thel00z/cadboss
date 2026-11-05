@@ -303,7 +303,7 @@ impl Outline {
         );
     }
 
-    /// Tokens of the row's source record: the HEADER section, a BLOCK header, a LAYER record or the record of the row's handle.
+    /// Tokens of the row's source record: the HEADER section, a BLOCK header, a LAYER record, an entity row's own record or a text item's record by handle.
     pub fn record(&self, doc: &DxfDocument, row: usize) -> Option<Range<u32>> {
         match &self.rows.get(row)?.kind {
             RowKind::File => doc
@@ -326,10 +326,10 @@ impl Outline {
                 let item = group.items(&self.document.text).get(*index)?;
                 self.handles.get(&item.handle?).cloned()
             }
-            RowKind::Entity { slot } => {
-                let located = self.entities.get(*slot)?;
-                self.handles.get(&located.entity.common.handle?).cloned()
-            }
+            RowKind::Entity { slot } => self
+                .entities
+                .get(*slot)
+                .map(|located| located.tokens.clone()),
             RowKind::LayoutsFolder
             | RowKind::BlocksFolder
             | RowKind::LayersFolder
@@ -950,6 +950,38 @@ mod tests {
             ["LINE  WALLS", "LINE  PIPING", "LINE  PIPING"]
         );
         assert_eq!(details(&outline, line), ["135", "13E", "140"]);
+    }
+
+    #[test]
+    fn record_of_an_entity_row_is_its_own_tokens_without_a_handle() {
+        let bytes: &[u8] = concat!(
+            "  0\nSECTION\n  2\nENTITIES\n",
+            "  0\nLINE\n  8\nWALLS\n 10\n0\n 20\n0\n 11\n1\n 21\n1\n",
+            "  0\nLINE\n  8\nWALLS\n 10\n1\n 20\n1\n 11\n2\n 21\n2\n",
+            "  0\nENDSEC\n  0\nEOF\n"
+        )
+        .as_bytes();
+        let doc = DxfDocument::load(bytes).unwrap();
+        let mut outline = Outline::build(&doc, "bare.dxf");
+        assert!(outline.handles.is_empty());
+        let line = child(&outline, model(&outline), "LINE");
+        outline.load_page(&doc, line);
+        assert_eq!(details(&outline, line), ["", ""]);
+        let records: Vec<Range<u32>> = outline.rows[line]
+            .children
+            .iter()
+            .map(|row| outline.record(&doc, *row).unwrap())
+            .collect();
+        let tokens: Vec<Range<u32>> = outline
+            .entities
+            .iter()
+            .map(|located| located.tokens.clone())
+            .collect();
+        assert_eq!(records, tokens);
+        assert_ne!(records[0], records[1]);
+        assert!(records
+            .iter()
+            .all(|record| doc.tape().value(record.start, doc.bytes()) == b"LINE"));
     }
 
     #[test]
