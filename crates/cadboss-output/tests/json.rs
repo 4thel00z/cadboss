@@ -12,6 +12,7 @@ fn bytes_document() -> Document {
         layout: "Model".into(),
         position: None,
         height: None,
+        handle: None,
     };
     Document {
         metadata: Metadata::new(Format::Dxf, "AC1027".into()),

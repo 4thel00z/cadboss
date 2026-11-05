@@ -250,3 +250,36 @@ fn an_undecodable_attribute_value_keeps_its_bytes() {
     assert_eq!(groups.attributes.len(), 1);
     assert_eq!(groups.attributes[0].text, Text::Bytes(expected));
 }
+
+#[test]
+fn text_items_carry_the_handle_of_their_entity() {
+    let bytes = DxfBuilder::new()
+        .block("B", (0.0, 0.0))
+        .text("INSIDE", (0.0, 0.0), 1.0)
+        .end()
+        .text("HELLO", (0.0, 0.0), 2.5)
+        .insert_with_attribs("B", (1.0, 1.0), &[("TAG", "X")])
+        .build();
+    let doc = DxfDocument::load(bytes).unwrap();
+    let groups = doc.text();
+    let handles: Vec<Option<u64>> = doc
+        .entities("Model")
+        .map(|entity| entity.common.handle)
+        .collect();
+    let hello = groups
+        .annotations
+        .iter()
+        .find(|item| item.text.to_string() == "HELLO")
+        .unwrap();
+    assert_eq!(hello.handle, handles[0]);
+    assert!(hello.handle.is_some());
+    let inside = groups
+        .annotations
+        .iter()
+        .find(|item| item.text.to_string() == "INSIDE")
+        .unwrap();
+    assert!(inside.handle.is_some());
+    assert_ne!(inside.handle, handles[1]);
+    assert_eq!(groups.attributes[0].handle, handles[1]);
+    assert!(groups.names.iter().all(|item| item.handle.is_none()));
+}

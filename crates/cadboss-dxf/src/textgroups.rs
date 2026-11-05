@@ -136,6 +136,7 @@ impl Collector {
                         layout: layout.name.clone(),
                         position: Some(transform.apply(attribute.position)),
                         height: Some(attribute.height * transform.scale_factor()),
+                        handle: entity.common.handle,
                     });
                 }
             }
@@ -157,6 +158,7 @@ impl Collector {
                     layout: layout.name.clone(),
                     position: Some(transform.apply(*position)),
                     height: None,
+                    handle: entity.common.handle,
                 });
             }
             _ => {}
@@ -174,6 +176,7 @@ impl Collector {
             layout: layout.name.clone(),
             position: anchor(entity).map(|point| transform.apply(point)),
             height: None,
+            handle: entity.common.handle,
         });
     }
 
@@ -196,6 +199,7 @@ impl Collector {
                 layout: layout.name.clone(),
                 position,
                 height,
+                handle: entity.common.handle,
             },
             titled: in_title_block(path),
         };
@@ -273,6 +277,7 @@ fn unplaced(text: Text, source: TextSource) -> TextItem {
         layout: Text::default(),
         position: None,
         height: None,
+        handle: None,
     }
 }
 
