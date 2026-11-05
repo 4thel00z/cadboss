@@ -71,6 +71,18 @@ impl Group {
         }
     }
 
+    /// The group's key under `text` in `cadboss json` output.
+    pub fn json_key(self) -> &'static str {
+        match self {
+            Group::TitleBlock => "title_block",
+            Group::Annotations => "annotations",
+            Group::Names => "names",
+            Group::Attributes => "attributes",
+            Group::References => "references",
+            Group::Properties => "properties",
+        }
+    }
+
     pub fn items(self, groups: &TextGroups) -> &[TextItem] {
         match self {
             Group::TitleBlock => &groups.title_block,
@@ -637,14 +649,15 @@ fn entity_count(count: u64) -> String {
     format!("{count} entities")
 }
 
-fn hex(handle: Option<u64>) -> String {
+/// The handle in uppercase hex, empty when there is none.
+pub(crate) fn hex(handle: Option<u64>) -> String {
     handle
         .map(|handle| format!("{handle:X}"))
         .unwrap_or_default()
 }
 
 /// The text an entity row shows: TEXT, MTEXT, DIMENSION and LEADER text, the INSERT block name or the IMAGE path.
-fn entity_text(entity: &Entity) -> Option<&Text> {
+pub(crate) fn entity_text(entity: &Entity) -> Option<&Text> {
     match &entity.kind {
         EntityKind::Text { text, .. }
         | EntityKind::MText { text, .. }
