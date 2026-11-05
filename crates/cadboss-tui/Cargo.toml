@@ -12,6 +12,7 @@ categories = ["command-line-interface", "visualization"]
 cadboss-core.workspace = true
 cadboss-model.workspace = true
 cadboss-dxf.workspace = true
+cadboss-output.workspace = true
 ratatui = "0.29"
 crossterm = { version = "0.28", features = ["event-stream"] }
 tokio = { version = "1", features = ["rt", "macros", "sync", "time"] }

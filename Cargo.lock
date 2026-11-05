@@ -233,6 +233,7 @@ dependencies = [
  "cadboss-core",
  "cadboss-dxf",
  "cadboss-model",
+ "cadboss-output",
  "cadboss-testkit",
  "crossterm",
  "futures-util",
