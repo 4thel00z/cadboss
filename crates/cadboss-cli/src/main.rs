@@ -22,6 +22,7 @@ use crate::commands::obj::ObjArgs;
 use crate::commands::q::QArgs;
 use crate::commands::skill::SkillArgs;
 use crate::commands::text::TextArgs;
+use crate::commands::tui::TuiArgs;
 use crate::failure::Failure;
 
 #[derive(Args)]
@@ -57,6 +58,8 @@ enum Command {
     Layouts(LayoutsArgs),
     Layers(LayersArgs),
     Obj(ObjArgs),
+    /// Explore a drawing interactively in the terminal.
+    Tui(TuiArgs),
     Skill(SkillArgs),
 }
 
@@ -79,6 +82,10 @@ fn execute(cli: &Cli, out: &mut dyn Write) -> Result<Report, Failure> {
         Command::Layouts(args) => commands::layouts::run(&open(&args.file, common)?, out),
         Command::Layers(args) => commands::layers::run(&open(&args.file, common)?, out),
         Command::Obj(args) => commands::obj::run(args, &open(&args.file, common)?, out),
+        Command::Tui(args) => {
+            commands::tui::run(args, open(&args.file, common)?)?;
+            Ok(Report::default())
+        }
         Command::Skill(args) => {
             budget::parse(&common.budget)?;
             commands::skill::run(args, out)?;

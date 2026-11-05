@@ -25,6 +25,7 @@ Reads DXF files (ASCII and binary) and prints metadata, text, Markdown or JSON. 
   Example: `cadboss layers plan.dxf`
 - `cadboss obj FILE HANDLE` prints the raw group code and value pairs of the entity or object with that hex handle.
   Example: `cadboss obj plan.dxf 1F`
+- `cadboss tui FILE` opens the interactive explorer; it needs a terminal and is not for agents.
 - `cadboss skill install [-g]` writes this file to `./.claude/skills/cadboss/SKILL.md`, or to `~/.claude/skills/cadboss/SKILL.md` with `-g`; `cadboss skill show` prints it.
   Example: `cadboss skill install -g`
 

@@ -18,7 +18,9 @@ cadboss-core.workspace = true
 cadboss-model.workspace = true
 cadboss-dxf.workspace = true
 cadboss-output.workspace = true
+cadboss-tui.workspace = true
 clap.workspace = true
+tokio = { version = "1", features = ["rt", "time"] }
 serde.workspace = true
 serde_json.workspace = true
 jaq-core.workspace = true

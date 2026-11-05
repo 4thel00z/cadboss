@@ -155,12 +155,14 @@ dependencies = [
  "cadboss-model",
  "cadboss-output",
  "cadboss-testkit",
+ "cadboss-tui",
  "clap",
  "jaq-core",
  "jaq-json",
  "jaq-std",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]

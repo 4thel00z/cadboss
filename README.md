@@ -35,6 +35,7 @@ A drawing carries more words than it looks: the title block, the tags on every p
 - **Bounded by budgets, not by the file**: bytes, tokens, entities, layouts, nesting depth and string length each have a cap; the reader stops at the cap and says so.
 - **Malformed input is the normal input**: unknown entities, broken records, stray vertices, truncated sections and exceeded budgets become `Skipped { kind, reason, count }` notes, never errors. Panics are denied by the workspace lints, and a fuzz target runs in CI.
 - **One pass per layout**: the ENTITIES section is bucketed once; counts, extents and text come out of one walk per layout, so a 100-layout file costs the same as a 1-layout file.
+- **A terminal explorer**: `cadboss tui` browses layouts, blocks, layers and text, searches them, and shows every record as DXF pairs or a hex dump.
 - **jq on the drawing**: `cadboss q` runs a jq program over the JSON export without writing it to disk.
 - **A Claude Code skill**: `cadboss skill install` drops a skill that teaches the agent the commands and the output.
 
@@ -57,6 +58,7 @@ cadboss q       plan.dxf '.text.attributes[] | .text' -r   # jq over the JSON
 cadboss layouts plan.dxf                                   # name, kind, entity count
 cadboss layers  plan.dxf                                   # name, color, flags
 cadboss obj     plan.dxf 1F                                # the raw group codes of one handle
+cadboss tui     plan.dxf                                   # interactive explorer: outline, inspector, DXF source and hex
 cadboss skill   install                                    # the bundled Claude Code skill (-g for ~/.claude)
 ```
 
