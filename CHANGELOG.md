@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.1](https://github.com/4thel00z/cadboss/compare/v0.1.0...v0.1.1) (2026-11-05)
+
+
+### Bug Fixes
+
+* **release:** crate manifests carry the README ([111db87](https://github.com/4thel00z/cadboss/commit/111db8780e88c82c09e1c0f8d06a13efc47ad7df))
+* **release:** skip crates already on crates.io when publishing ([867ba56](https://github.com/4thel00z/cadboss/commit/867ba56af6eaa57c8d5da2020b4fb76333b261a3))
+
 ## 0.1.0 (2026-11-05)
 
 
