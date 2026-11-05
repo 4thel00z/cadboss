@@ -70,6 +70,12 @@ The CLI memory-maps the input. Truncating or rewriting that file while `cadboss`
   <img src="https://raw.githubusercontent.com/4thel00z/cadboss/main/assets/cli.png" alt="The cadboss CLI on the demo drawing: info, the attributes of two pumps and a title block, the xref, image and hyperlink references, and a jq query that picks out the dimension texts" width="100%">
 </p>
 
+`cadboss tui` opens the same drawing as a tree: layouts, blocks, layers and text groups on the left, the selected row's fields top right, its raw record as DXF pairs or a hex dump bottom right. `/` searches names, text, layers and handles, `x` switches the record view, `y` copies the text, the handle, the record or a ready `jq` query.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/4thel00z/cadboss/main/assets/tui.png" alt="cadboss tui on the demo drawing after searching for p-10: the text groups expanded in the outline with the matches highlighted, the selected attribute's fields in the inspector, and the INSERT record it came from as DXF pairs" width="100%">
+</p>
+
 ```python
 import cadboss
 
