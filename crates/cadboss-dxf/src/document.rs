@@ -284,6 +284,11 @@ impl DxfDocument {
         &self.header
     }
 
+    /// The codepage text values are decoded with, from the header's version and `$DWGCODEPAGE`.
+    pub fn codepage(&self) -> Codepage {
+        self.cp
+    }
+
     pub fn layers(&self) -> &[Layer] {
         &self.layers
     }
@@ -346,8 +351,8 @@ impl DxfDocument {
         (buckets, notes)
     }
 
-    /// Block whose body holds the entities of the layout at `position`: the block of a paper layout when that body is not empty.
-    pub(crate) fn body_block(&self, position: usize) -> Option<usize> {
+    /// Position in `blocks()` of the block whose non-empty body holds the entities of the paper layout at `position` in `layouts()`.
+    pub fn body_block(&self, position: usize) -> Option<usize> {
         let layout = self.layouts.get(position)?;
         if layout.kind != LayoutKind::Paper {
             return None;

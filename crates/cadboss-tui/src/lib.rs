@@ -109,25 +109,42 @@ fn spawn_outline(doc: Arc<DxfDocument>, title: String, tx: UnboundedSender<Msg>)
 /// Starts what a command asks for; work done in place returns the commands its result leads to.
 fn execute_cmd(app: &mut App, tx: &UnboundedSender<Msg>, cmd: Cmd) -> Vec<Cmd> {
     match cmd {
-        Cmd::Copy { target, text } => {
+        Cmd::Copy {
+            target,
+            partial,
+            text,
+        } => {
             let tx = tx.clone();
             tokio::task::spawn_blocking(move || {
                 let msg = match clipboard::copy_native(&text) {
                     Ok(()) => Msg::Copied {
                         target,
+                        partial,
                         result: Ok(Transport::Native),
                     },
-                    Err(_) => Msg::NoNativeClipboard { target, text },
+                    Err(_) => Msg::NoNativeClipboard {
+                        target,
+                        partial,
+                        text,
+                    },
                 };
                 tx.send(msg).ok();
             });
             Vec::new()
         }
-        Cmd::Osc52 { target, text } => {
+        Cmd::Osc52 {
+            target,
+            partial,
+            text,
+        } => {
             let result = clipboard::write_osc52(&text)
                 .map(|()| Transport::Osc52)
                 .map_err(|error| error.to_string());
-            app.update(Msg::Copied { target, result })
+            app.update(Msg::Copied {
+                target,
+                partial,
+                result,
+            })
         }
     }
 }

@@ -115,7 +115,7 @@ fn opening_shows_the_drawing() -> TestResult {
             "│                                ││ Updated    2460372.5                       │",
             "│                                ││ Extents    (0, 0) to (12500, 8000)         │",
             "│                                ││ Layers     7                               │",
-            "│                                ││ Blocks     3                               │",
+            "│                                ││ Blocks     3 named, 3 anonymous            │",
             "│                                ││ Layouts    3                               │",
             "│                                ││ Entities   15                              │",
             "│                                ││                                            │",
@@ -231,14 +231,39 @@ fn undecodable_text_shows_its_bytes_in_hex() -> TestResult {
 
     press(&mut app, KeyCode::Char('x'));
     assert_eq!(app.view, View::Hex);
-    for _ in 0..9 {
-        press_with(&mut app, KeyCode::Left, KeyModifiers::ALT);
-        press_with(&mut app, KeyCode::Up, KeyModifiers::ALT);
-    }
-    let lines = frame(&mut app)?;
-    assert!(contains(&lines, "╭ Hex "), "{lines:?}");
-    assert!(contains(&lines, "ff 41"), "{lines:?}");
-    Ok(())
+    press(&mut app, KeyCode::Tab);
+    press(&mut app, KeyCode::Tab);
+    press(&mut app, KeyCode::Char('G'));
+    assert_eq!(app.splits, ui::Splits::default());
+    assert_frame(
+        &mut app,
+        &[
+            " cadboss   odd.dxf   DXF AC1027   1 entity in 2 layouts            2 text items",
+            "╭ Outline ───────────────────────╮╭ Annotation ────────────────────────────────╮",
+            "│  ▾ odd.dxf                     ││ [non-decodable text, 2 bytes]              │",
+            "│    ▸ Layouts                 2 ││                                            │",
+            "│    ▸ Blocks                  2 ││ Source     Annotation                      │",
+            "│    ▸ Layers                  1 ││ Layer      0                               │",
+            "│    ▾ Text                    6 ││ Layout     Model                           │",
+            "│        title block           0 ││ Position   0, 0                            │",
+            "│      ▾ annotations           1 ││ Height     12.5                            │",
+            "│▌     │   [non-decodable text…  ││ Handle     10C                             │",
+            "│      ▸ names                 1 ││                                            │",
+            "│        attributes            0 ││                                            │",
+            "│        references            0 ││                                            │",
+            "│        properties            0 ││                                            │",
+            "│                                │╰────────────────────────────────────────────╯",
+            "│                                │╭ Hex ───────────────────────── 0x4da..0x53d ╮",
+            "│                                ││ 0000053a  ff 41 0a     |.A.|               │",
+            "│                                ││                                            │",
+            "│                                ││                                            │",
+            "│                                ││                                            │",
+            "│                                ││                                            │",
+            "│                                ││                                            ┃",
+            "╰────────────────────────────────╯╰────────────────────────────────────────────╯",
+            " browse   / search   ] next layout   x hex   y copy   ? keys   q quit",
+        ],
+    )
 }
 
 #[test]
@@ -246,20 +271,69 @@ fn binary_drawing_opens_in_hex_and_toggles_to_pairs() -> TestResult {
     let doc = DxfDocument::open(Path::new(&repo("tests/fixtures/simple-binary.dxf")))?;
     let mut app = loaded(doc, "simple-binary.dxf", "tests/fixtures/simple-binary.dxf");
     assert_eq!(app.view, View::Hex);
-    let lines = frame(&mut app)?;
-    assert!(contains(&lines, "╭ Hex "), "{lines:?}");
-    assert!(contains(&lines, " 0x29..0x105 ╮"), "{lines:?}");
-    assert!(
-        contains(&lines, "│ 00000029  09 00 24 41 43 41 44 56"),
-        "{lines:?}"
-    );
+    assert_frame(
+        &mut app,
+        &[
+            " cadboss   simple-binary.dxf   DXF AC1027                          5 text items",
+            "╭ Outline ───────────────────────╮╭ Drawing ───────────────────────────────────╮",
+            "│▌ ▾ simple-binary.dxf           ││ Format     DXF AC1027                      │",
+            "│    ▸ Layouts                 2 ││ Units      Millimeters                     │",
+            "│    ▸ Blocks                  3 ││ Codepage   ANSI_1252                       │",
+            "│    ▸ Layers                  2 ││ Author     cadboss-testkit                 │",
+            "│    ▸ Text                    6 ││ Created    2460371.5                       │",
+            "│                                ││ Updated    2460372.5                       │",
+            "│                                ││ Extents    (0, 0) to (65, 40)              │",
+            "│                                ││ Layers     2                               │",
+            "│                                ││ Blocks     1 named, 2 anonymous            │",
+            "│                                ││ Layouts    2                               │",
+            "│                                ││ Entities   4                               │",
+            "│                                ││                                            │",
+            "│                                │╰────────────────────────────────────────────╯",
+            "│                                │╭ Hex ────────────────────────── 0x29..0x105 ╮",
+            "│                                ││ 00000029  09 00 24 41  |..$A|              ┃",
+            "│                                ││ 0000002d  43 41 44 56  |CADV|              │",
+            "│                                ││ 00000031  45 52 00 01  |ER..|              │",
+            "│                                ││ 00000035  00 41 43 31  |.AC1|              │",
+            "│                                ││ 00000039  30 32 37 00  |027.|              │",
+            "│                                ││ 0000003d  09 00 24 44  |..$D|              │",
+            "╰────────────────────────────────╯╰────────────────────────────────────────────╯",
+            " browse   / search   ] next layout   x hex   y copy   ? keys   q quit",
+        ],
+    )?;
 
     type_text(&mut app, "jllll");
     assert_eq!(label(&app), "CIRCLE");
     type_text(&mut app, "ll");
     assert_eq!(label(&app), "CIRCLE  DIM");
-    let lines = frame(&mut app)?;
-    assert!(contains(&lines, "╭ Hex "), "{lines:?}");
+    assert_frame(
+        &mut app,
+        &[
+            " cadboss   simple-binary.dxf   DXF AC1027                          5 text items",
+            "╭ Outline ───────────────────────╮╭ CIRCLE 113 ────────────────────────────────╮",
+            "│  ▾ simple-binary.dxf           ││ Type       CIRCLE                          │",
+            "│    ▾ Layouts                 2 ││ Layer      DIM                             │",
+            "│    │ ▾ Model                   ││ Layout     Model                           │",
+            "│    │ │ ▾ CIRCLE              1 ││ Handle     113                             │",
+            "│▌   │ │ │   CIRCLE  DIM         ││ Color      256                             │",
+            "│    │ │ ▸ LINE                1 ││ Center     60, 30                          │",
+            "│    │ │ ▸ TEXT                1 ││ Radius     5                               │",
+            "│    │ ▸ Layout1                 ││                                            │",
+            "│    ▸ Blocks                  3 ││                                            │",
+            "│    ▸ Layers                  2 ││                                            │",
+            "│    ▸ Text                    6 ││                                            │",
+            "│                                ││                                            │",
+            "│                                │╰────────────────────────────────────────────╯",
+            "│                                │╭ Hex ───────────────────────── 0x6ea..0x747 ╮",
+            "│                                ││ 000006ea  00 00 43 49  |..CI|              ┃",
+            "│                                ││ 000006ee  52 43 4c 45  |RCLE|              ┃",
+            "│                                ││ 000006f2  00 05 00 31  |...1|              │",
+            "│                                ││ 000006f6  31 33 00 4a  |13.J|              │",
+            "│                                ││ 000006fa  01 31 30 34  |.104|              │",
+            "│                                ││ 000006fe  00 64 00 41  |.d.A|              │",
+            "╰────────────────────────────────╯╰────────────────────────────────────────────╯",
+            " browse   / search   ] next layout   x hex   y copy   ? keys   q quit",
+        ],
+    )?;
 
     press(&mut app, KeyCode::Char('x'));
     assert_eq!(app.view, View::Pairs);
@@ -417,6 +491,7 @@ fn status_bar_drops_whole_hints_to_make_room() -> TestResult {
 
     app.update(Msg::Copied {
         target: YankTarget::Query,
+        partial: false,
         result: Err("no native clipboard".to_owned()),
     });
     let lines = frame(&mut app)?;
@@ -460,7 +535,34 @@ fn a_record_past_the_limit_ends_with_the_count_of_bytes_left_out() -> TestResult
     press(&mut app, KeyCode::Tab);
     press(&mut app, KeyCode::End);
     assert_eq!(app.source_scroll, count - 1);
-    let lines = frame(&mut app)?;
-    assert!(contains(&lines, &note), "{lines:?}");
-    Ok(())
+    assert_eq!(app.source.bytes.start + count * 4, 0x104dc);
+    assert_frame(
+        &mut app,
+        &[
+            " cadboss   long.dxf   DXF AC1027   1 entity in 2 layouts           2 text items",
+            "╭ Outline ───────────────────────╮╭ MTEXT 10C ─────────────────────────────────╮",
+            "│  ▾ long.dxf                    ││ Type       MTEXT                           │",
+            "│    ▾ Layouts                 2 ││ Layer      0                               │",
+            "│    │ ▾ Model                   ││ Layout     Model                           │",
+            "│    │ │ ▾ MTEXT               1 ││ Handle     10C                             │",
+            "│▌   │ │     MTEXT  0  AAAAAAA…  ││ Color      256                             │",
+            "│    │   Layout1                 ││ Text                                       │",
+            "│    ▸ Blocks                  2 ││ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA │",
+            "│    ▸ Layers                  1 ││ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA │",
+            "│    ▸ Text                    6 ││ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA │",
+            "│                                ││ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA │",
+            "│                                ││ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA │",
+            "│                                ││ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA │",
+            "│                                │╰────────────────────────────────────────────╯",
+            "│                                │╭ Hex ─────────────────────── 0x4dc..0x11c29 ╮",
+            "│                                ││ 000104d8  41 41 41 41  |AAAA|              │",
+            "│                                ││ 5965 more bytes: cadboss obj shows them    │",
+            "│                                ││                                            │",
+            "│                                ││                                            │",
+            "│                                ││                                            │",
+            "│                                ││                                            ┃",
+            "╰────────────────────────────────╯╰────────────────────────────────────────────╯",
+            " browse   / search   ] next layout   x hex   y copy   ? keys   q quit",
+        ],
+    )
 }

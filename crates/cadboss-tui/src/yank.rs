@@ -5,6 +5,7 @@ use crossterm::event::KeyCode;
 
 use crate::app::App;
 use crate::outline::{entity_text, hex, Group, Outline, Row, RowKind};
+use crate::source::WIDE_HEX;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum YankTarget {
@@ -70,7 +71,7 @@ pub fn shell_quote(text: &str) -> String {
 }
 
 /// What copying `target` takes from the selected row, empty when the row has none.
-/// DXF is the shown pairs as `cadboss obj` prints them, hex the shown dump, one line each.
+/// DXF is every pair of the record as `cadboss obj` prints them, hex the shown bytes sixteen to a line.
 pub fn yank_text(app: &App, target: YankTarget) -> String {
     let outline = &app.outline;
     let Some(row) = outline.rows.get(app.selected) else {
@@ -82,21 +83,30 @@ pub fn yank_text(app: &App, target: YankTarget) -> String {
             .map(Text::to_string)
             .unwrap_or_default(),
         YankTarget::Handle => hex(handle(outline, &row.kind)),
-        YankTarget::Dxf => app
-            .source
-            .pairs
-            .iter()
-            .map(|(code, value)| format!("{code}\t{value}\n"))
-            .collect(),
+        YankTarget::Dxf => dxf(app),
         YankTarget::Hex => app
             .source
-            .hex
-            .iter()
-            .map(|line| line.clone() + "\n")
+            .hex_dump(&app.doc, WIDE_HEX)
+            .into_iter()
+            .map(|line| line + "\n")
             .collect(),
         YankTarget::Query => query(outline, &row.kind).unwrap_or_default(),
         YankTarget::Command => command(outline, &row.kind, &app.target).unwrap_or_default(),
     }
+}
+
+/// Every pair of the selected record, past the source limit too, one `{code}\t{value}` line each.
+fn dxf(app: &App) -> String {
+    let Some(tokens) = app.source.tokens.clone() else {
+        return String::new();
+    };
+    let tape = app.doc.tape();
+    tape.pairs(tokens)
+        .map(|(index, code)| {
+            let value = tape.display_value(code, tape.value(index, app.doc.bytes()));
+            format!("{code}\t{value}\n")
+        })
+        .collect()
 }
 
 fn item<'o>(outline: &'o Outline, kind: &RowKind) -> Option<&'o TextItem> {
@@ -208,11 +218,14 @@ mod tests {
 
     use cadboss_dxf::DxfDocument;
     use cadboss_model::{Text, TextItem, TextSource};
+    use cadboss_testkit::dxf::DxfBuilder;
     use crossterm::event::{KeyEvent, KeyModifiers};
 
     use super::*;
-    use crate::app::{App, Msg};
+    use crate::app::{App, Cmd, Msg};
+    use crate::clipboard::Transport;
     use crate::outline::{Group, Outline, RowKind, ROOT};
+    use crate::source::SOURCE_LIMIT;
 
     fn demo() -> App {
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/demo.dxf");
@@ -255,7 +268,18 @@ mod tests {
         assert!(dxf.contains("\n2\tPUMP\n"));
         assert!(dxf.ends_with('\n'));
         assert_eq!(dxf.lines().count(), app.source.pairs.len());
-        assert_eq!(hex, app.source.hex.join("\n") + "\n");
+        assert_eq!(app.source.bytes_per_line, 4);
+        let start = app.source.bytes.start;
+        let lines: Vec<&str> = hex.lines().collect();
+        assert_eq!(lines.len(), app.source.bytes.len().div_ceil(16));
+        assert_eq!(
+            lines[0],
+            format!(
+                "{start:08x}  20 20 30 0a 49 4e 53 45  52 54 0a 20 20 35 0a 31  |  0.INSERT.  5.1|"
+            )
+        );
+        assert!(lines[1].starts_with(&format!("{:08x}  ", start + 16)));
+        assert!(hex.ends_with("|\n"));
         assert_eq!(
             query,
             r#".text.attributes[] | select(.text == "TAG=P-101")"#
@@ -340,6 +364,87 @@ mod tests {
         assert!(dxf.starts_with("0\tINSERT\n5\t136\n"));
         assert_eq!(query, "");
         assert_eq!(command, "cadboss obj assets/demo.dxf 136");
+    }
+
+    #[test]
+    fn dxf_copy_of_a_record_past_the_limit_holds_every_pair_and_the_hex_toast_notes_the_cut() {
+        let long = "A".repeat(70_000);
+        let bytes = DxfBuilder::new().mtext(&long, (0.0, 0.0), 2.5).build();
+        let doc = Arc::new(DxfDocument::load(bytes).unwrap());
+        let mut app = App::new(
+            Arc::clone(&doc),
+            "long.dxf".to_owned(),
+            "long.dxf".to_owned(),
+            (80, 24),
+        );
+        app.update(Msg::Loaded(Box::new(Outline::build(&doc, "long.dxf"))));
+        let group = row(&app, &["Layouts", "Model", "MTEXT"]);
+        app.select(group);
+        app.update(Msg::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)));
+        app.select(app.outline.rows[group].children[0]);
+        assert!(app.source.more > 0);
+        let tokens = app.source.tokens.clone().unwrap();
+        assert!(app.source.pairs.len() < tokens.len());
+
+        let dxf = yank_text(&app, YankTarget::Dxf);
+        let lines: Vec<&str> = dxf.lines().collect();
+        assert_eq!(lines.len(), tokens.len());
+        assert_eq!(lines[0], "0\tMTEXT");
+        let text: String = lines
+            .iter()
+            .filter_map(|line| {
+                line.strip_prefix("3\t")
+                    .or_else(|| line.strip_prefix("1\t"))
+            })
+            .collect();
+        assert_eq!(text, long);
+        assert!(dxf.ends_with('\n'));
+
+        let hex = yank_text(&app, YankTarget::Hex);
+        assert_eq!(hex.lines().count(), SOURCE_LIMIT / 16);
+        assert_eq!(app.source.hex.len(), SOURCE_LIMIT / 4);
+
+        let press = |app: &mut App, c: char| {
+            app.update(Msg::Key(KeyEvent::new(
+                KeyCode::Char(c),
+                KeyModifiers::NONE,
+            )))
+        };
+        press(&mut app, 'y');
+        assert_eq!(
+            press(&mut app, 'x'),
+            [Cmd::Copy {
+                target: YankTarget::Hex,
+                partial: true,
+                text: hex,
+            }]
+        );
+        let toast = |app: &mut App, transport: Transport| {
+            app.update(Msg::Copied {
+                target: YankTarget::Hex,
+                partial: true,
+                result: Ok(transport),
+            });
+            app.toast.as_ref().unwrap().text.clone()
+        };
+        assert_eq!(
+            toast(&mut app, Transport::Native),
+            "Copied hex (first 64 KiB)"
+        );
+        assert_eq!(
+            toast(&mut app, Transport::Osc52),
+            "Copied hex (first 64 KiB) through the terminal"
+        );
+
+        press(&mut app, 'y');
+        assert_eq!(
+            press(&mut app, 'd'),
+            [Cmd::Copy {
+                target: YankTarget::Dxf,
+                partial: false,
+                text: dxf,
+            }]
+        );
     }
 
     #[test]

@@ -15,7 +15,7 @@ use ratatui::Frame;
 
 use crate::app::{App, Pane, Toast};
 use crate::inspector::{inspector_lines, inspector_title};
-use crate::outline::RowKind;
+use crate::outline::{counted, RowKind};
 use crate::source::View;
 use crate::theme::Theme;
 use crate::yank::{yank_text, YankTarget, TARGETS};
@@ -55,6 +55,8 @@ pub const SPINNER: [char; 10] = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦'
 const LABEL_ROOM: usize = 18;
 /// Blank columns kept between the left and right parts of the header and the status bar.
 const BAR_GAP: usize = 2;
+/// Blank columns inside each side border of the source pane.
+const SOURCE_PADDING: u16 = 1;
 const COPY_POPUP: (u16, u16) = (76, 11);
 const KEYS_POPUP: (u16, u16) = (64, 15);
 const HINTS: [(&str, &str); 6] = [
@@ -104,6 +106,12 @@ pub fn panes(area: Rect, splits: Splits) -> Panes {
         source,
         status,
     }
+}
+
+/// Columns the source pane lays its lines out in on a `size` screen, inside its borders and padding.
+pub fn source_width(size: (u16, u16), splits: Splits) -> usize {
+    let area = panes(Rect::new(0, 0, size.0, size.1), splits).source;
+    usize::from(area.width.saturating_sub(2 + 2 * SOURCE_PADDING))
 }
 
 /// Paints the whole screen. The inspector and source scroll offsets are clamped to their content and written back.
@@ -193,9 +201,9 @@ fn header_left(app: &App, room: usize) -> Line<'static> {
     let counts = (!app.loading).then(|| {
         Span::styled(
             format!(
-                "   {} entities in {} layouts",
-                entity_total(metadata),
-                metadata.layout_count
+                "   {} in {}",
+                counted(entity_total(metadata), "entity", "entities"),
+                counted(u64::from(metadata.layout_count), "layout", "layouts")
             ),
             theme.muted(),
         )
@@ -544,7 +552,7 @@ fn view_title(view: View) -> &'static str {
 fn source_block(app: &App) -> Block<'static> {
     let theme = &app.theme;
     let block = pane(theme, view_title(app.view), app.focus == Pane::Source)
-        .padding(Padding::horizontal(1));
+        .padding(Padding::horizontal(SOURCE_PADDING));
     if app.source.pairs.is_empty() {
         return block;
     }
@@ -679,6 +687,15 @@ fn toast_span(theme: &Theme, toast: &Toast) -> Span<'static> {
     )
 }
 
+/// The position among the search hits, or their count before `n` or enter goes to one.
+fn hit_position(app: &App) -> String {
+    let count = app.search.hits.len();
+    let Some(current) = app.search.current else {
+        return matches_label(count);
+    };
+    format!("match {} of {count}", current.saturating_add(1))
+}
+
 /// The toast while one is up, else the position among the search hits.
 fn browse_right(app: &App) -> Vec<Span<'static>> {
     let theme = &app.theme;
@@ -689,11 +706,7 @@ fn browse_right(app: &App) -> Vec<Span<'static>> {
         return Vec::new();
     }
     let mut spans = vec![Span::styled(
-        format!(
-            "match {} of {}   ",
-            app.search.current.saturating_add(1),
-            app.search.hits.len()
-        ),
+        format!("{}   ", hit_position(app)),
         theme.muted(),
     )];
     spans.extend(hint(theme, "n", "next"));
@@ -994,6 +1007,15 @@ mod tests {
         assert_eq!(
             header_left(&app, 200).to_string(),
             " cadboss   demo.dxf   DXF AC1032   Millimeters"
+        );
+
+        app.loading = false;
+        let metadata = &mut app.outline.document.metadata;
+        metadata.entity_counts = vec![("LINE".to_owned(), 1)];
+        metadata.layout_count = 1;
+        assert_eq!(
+            header_left(&app, 200).to_string(),
+            " cadboss   demo.dxf   DXF AC1032   Millimeters   1 entity in 1 layout"
         );
     }
 }

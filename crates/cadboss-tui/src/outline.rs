@@ -6,9 +6,9 @@ use std::hash::Hash;
 use std::ops::Range;
 
 use cadboss_core::Report;
-use cadboss_dxf::{decode, Codepage, DxfDocument, EntityDecoder, SectionName};
+use cadboss_dxf::{decode, DxfDocument, EntityDecoder, SectionName};
 use cadboss_model::{
-    Block, Document, Entity, EntityKind, Layer, Layout, LayoutKind, Text, TextGroups, TextItem,
+    Block, Document, Entity, EntityKind, Layer, Layout, Text, TextGroups, TextItem,
 };
 use cadboss_output::one_line;
 
@@ -203,11 +203,8 @@ impl Outline {
         let layout_tallies: Vec<Tally> = (0..document.layouts.len())
             .map(|position| survey.tally(decoder(doc, &document, Owner::Layout(position))))
             .collect();
-        let bodies: HashMap<usize, usize> = document
-            .layouts
-            .iter()
-            .enumerate()
-            .filter_map(|(position, layout)| Some((body_block(doc, layout)?, position)))
+        let bodies: HashMap<usize, usize> = (0..document.layouts.len())
+            .filter_map(|position| Some((doc.body_block(position)?, position)))
             .collect();
         let block_tallies: Vec<Tally> = (0..document.blocks.len())
             .map(|index| {
@@ -463,7 +460,11 @@ impl Tree<'_> {
     fn layouts(&mut self, layouts: &[Layout], tallies: &[Tally]) {
         let folder = self.folder(RowKind::LayoutsFolder, "Layouts", layouts.len());
         for (position, (layout, tally)) in layouts.iter().zip(tallies).enumerate() {
-            let detail = entity_count(tally.iter().map(|(_, count)| count).sum());
+            let detail = counted(
+                tally.iter().map(|(_, count)| count).sum(),
+                "entity",
+                "entities",
+            );
             let row = self.add(
                 folder,
                 RowKind::Layout(position),
@@ -478,7 +479,13 @@ impl Tree<'_> {
         let folder = self.folder(RowKind::BlocksFolder, "Blocks", blocks.len());
         for (index, (block, tally)) in blocks.iter().zip(tallies).enumerate() {
             let detail = block.xref_path.as_ref().map_or_else(
-                || entity_count(tally.iter().map(|(_, count)| count).sum()),
+                || {
+                    counted(
+                        tally.iter().map(|(_, count)| count).sum(),
+                        "entity",
+                        "entities",
+                    )
+                },
                 Text::to_string,
             );
             let row = self.add(folder, RowKind::Block(index), label(&block.name), detail);
@@ -498,7 +505,7 @@ impl Tree<'_> {
             .into_iter()
             .filter(|(set, _)| *set)
             .map(|(_, flag)| flag);
-            let detail = std::iter::once(entity_count(count).as_str())
+            let detail = std::iter::once(counted(count, "entity", "entities").as_str())
                 .chain(flags)
                 .collect();
             self.add(folder, RowKind::Layer(index), label(&layer.name), detail);
@@ -581,16 +588,6 @@ fn decoder<'d>(
     }
 }
 
-/// Position in `blocks()` of the block whose non-empty body `DxfDocument::entities` reads for a paper layout.
-fn body_block(doc: &DxfDocument, layout: &Layout) -> Option<usize> {
-    if layout.kind != LayoutKind::Paper {
-        return None;
-    }
-    let name = layout.block_name.as_str()?;
-    doc.block_def(name).filter(|def| !def.entities.is_empty())?;
-    doc.block_index(name)
-}
-
 /// LAYER records of the TABLES section keyed by their name, decoded with the document's codepage as `Layer::name` is.
 fn layer_records(doc: &DxfDocument) -> HashMap<Vec<u8>, Range<u32>> {
     let mut records = HashMap::new();
@@ -598,11 +595,7 @@ fn layer_records(doc: &DxfDocument) -> HashMap<Vec<u8>, Range<u32>> {
     let Some(tables) = tape.section(SectionName::Tables) else {
         return records;
     };
-    let header = doc.header();
-    let cp = Codepage::from_header(
-        header.version.as_bytes(),
-        header.codepage.as_ref().map(Text::as_bytes),
-    );
+    let cp = doc.codepage();
     let mut open: Option<(u32, Option<Vec<u8>>)> = None;
     for (index, code) in tape.pairs(tables.start..tables.end) {
         if code == 0 {
@@ -645,8 +638,12 @@ fn label(text: &Text) -> String {
     one_line(&text.to_string())
 }
 
-fn entity_count(count: u64) -> String {
-    format!("{count} entities")
+/// The count and its noun: `singular` for one, `plural` for any other count.
+pub(crate) fn counted(count: u64, singular: &str, plural: &str) -> String {
+    if count == 1 {
+        return format!("1 {singular}");
+    }
+    format!("{count} {plural}")
 }
 
 /// The handle in uppercase hex, empty when there is none.
@@ -776,7 +773,7 @@ mod tests {
         assert_eq!(labels(&outline, layouts), ["Model", "Layout1", "Sheet 1"]);
         assert_eq!(
             details(&outline, layouts),
-            ["14 entities", "0 entities", "1 entities"]
+            ["14 entities", "0 entities", "1 entity"]
         );
         let model = child(&outline, layouts, "Model");
         assert_eq!(outline.rows[model].kind, RowKind::Layout(0));
@@ -799,7 +796,7 @@ mod tests {
             [
                 "0 entities",
                 "0 entities",
-                "1 entities",
+                "1 entity",
                 "3 entities",
                 "8 entities",
                 "../xrefs/site-plan.dxf"
@@ -822,7 +819,7 @@ mod tests {
                 "3 entities",
                 "3 entities",
                 "4 entities",
-                "1 entities"
+                "1 entity"
             ]
         );
 
@@ -855,6 +852,14 @@ mod tests {
         assert!(outline.is_last_child(ROOT));
         assert!(outline.is_last_child(text));
         assert!(!outline.is_last_child(layouts));
+    }
+
+    #[test]
+    fn counted_takes_the_singular_for_one_and_the_plural_otherwise() {
+        assert_eq!(counted(1, "entity", "entities"), "1 entity");
+        assert_eq!(counted(0, "entity", "entities"), "0 entities");
+        assert_eq!(counted(2, "layout", "layouts"), "2 layouts");
+        assert_eq!(counted(1, "layout", "layouts"), "1 layout");
     }
 
     #[test]

@@ -117,6 +117,20 @@ fn source_label(source: TextSource) -> &'static str {
     }
 }
 
+/// The named block count, and the anonymous count beside it when there are anonymous blocks.
+fn block_counts(document: &cadboss_model::Document) -> String {
+    let named = document.metadata.block_count;
+    let anonymous = document
+        .blocks
+        .iter()
+        .filter(|block| block.anonymous)
+        .count();
+    if anonymous == 0 {
+        return named.to_string();
+    }
+    format!("{named} named, {anonymous} anonymous")
+}
+
 /// Metadata facts, then once loaded the counts, the entity types and the notes the report holds.
 fn file_lines(app: &App, width: usize) -> Vec<Line<'static>> {
     let theme = &app.theme;
@@ -147,7 +161,7 @@ fn file_lines(app: &App, width: usize) -> Vec<Line<'static>> {
         theme,
         vec![
             ("Layers", metadata.layer_count.to_string()),
-            ("Blocks", metadata.block_count.to_string()),
+            ("Blocks", block_counts(document)),
             ("Layouts", metadata.layout_count.to_string()),
             ("Entities", entity_total(metadata).to_string()),
         ],
@@ -674,6 +688,7 @@ mod tests {
     fn file_inspector_lists_entity_types_then_notes() {
         let mut app = demo();
         let lines = texts(&inspector_lines(&app, 24));
+        assert_eq!(lines[8], "Blocks     3 named, 3 anonymous");
         assert_eq!(lines[11], "");
         assert_eq!(lines[12], "Entity types ───────────");
         assert_eq!(lines[13], "INSERT      4");
@@ -687,6 +702,10 @@ mod tests {
         let lines = texts(&inspector_lines(&app, 24));
         assert_eq!(lines[22], "Notes while reading (1) ");
         assert_eq!(lines[23], "1 entity skipped (malformed)");
+
+        app.outline.document.blocks.retain(|block| !block.anonymous);
+        let lines = texts(&inspector_lines(&app, 24));
+        assert_eq!(lines[8], "Blocks     3");
 
         app.loading = true;
         let lines = texts(&inspector_lines(&app, 24));

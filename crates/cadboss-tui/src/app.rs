@@ -10,9 +10,11 @@ use crossterm::event::{KeyEvent, KeyEventKind};
 use crate::clipboard::Transport;
 use crate::input::{action, Action, KeyContext};
 use crate::outline::{Outline, RowKind, ROOT};
-use crate::source::{hex_line_of, pair_line_of, source, Source, View};
+use crate::source::{
+    bytes_per_line, hex_line_of, pair_line_of, source, Source, View, SOURCE_LIMIT,
+};
 use crate::theme::Theme;
-use crate::ui::{Splits, RIGHT_TOP_SPLIT, SPLIT_STEP, TREE_SPLIT};
+use crate::ui::{source_width, Splits, RIGHT_TOP_SPLIT, SPLIT_STEP, TREE_SPLIT};
 use crate::yank::{yank_text, YankTarget};
 
 /// Ticks (100 ms each) a status-bar toast stays up.
@@ -34,21 +36,32 @@ pub enum Msg {
     Loaded(Box<Outline>),
     Copied {
         target: YankTarget,
+        /// The text stopped at the record's first `SOURCE_LIMIT` bytes.
+        partial: bool,
         result: Result<Transport, String>,
     },
     /// No native clipboard took the text; the loop falls back to OSC 52.
     NoNativeClipboard {
         target: YankTarget,
+        partial: bool,
         text: String,
     },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Cmd {
-    /// Hand the text to the native clipboard, off the input loop.
-    Copy { target: YankTarget, text: String },
+    /// Hand the text to the native clipboard, off the input loop; `partial` text stops at the record's first `SOURCE_LIMIT` bytes.
+    Copy {
+        target: YankTarget,
+        partial: bool,
+        text: String,
+    },
     /// Write the OSC 52 sequence from the loop, between frames.
-    Osc52 { target: YankTarget, text: String },
+    Osc52 {
+        target: YankTarget,
+        partial: bool,
+        text: String,
+    },
 }
 
 #[derive(Clone, Debug, Default)]
@@ -57,7 +70,8 @@ pub struct Search {
     pub editing: bool,
     pub query: String,
     pub hits: Vec<usize>,
-    pub current: usize,
+    /// Position in `hits` of the hit last gone to; none until `n`, `N` or enter goes to one.
+    pub current: Option<usize>,
 }
 
 #[derive(Clone, Debug)]
@@ -213,7 +227,39 @@ impl App {
         self.inspector_scroll = 0;
         self.source_scroll = 0;
         self.last_switch = None;
-        self.source = source(&self.doc, self.outline.record(&self.doc, row));
+        self.source = source(
+            &self.doc,
+            self.outline.record(&self.doc, row),
+            self.hex_width(),
+        );
+    }
+
+    /// Bytes per hex line that fit the source pane at the current size and splits.
+    fn hex_width(&self) -> usize {
+        bytes_per_line(source_width(self.size, self.splits))
+    }
+
+    /// Lays the hex lines out again when the source pane fits another line length, keeping the byte at the top of the pane in view.
+    fn fit_hex(&mut self) {
+        let width = self.hex_width();
+        let previous = self.source.bytes_per_line;
+        if width == previous {
+            return;
+        }
+        let base = self.source.bytes.start;
+        let top = base.saturating_add(self.source_scroll.saturating_mul(previous));
+        self.source.refit(&self.doc, width);
+        self.last_switch = None;
+        if self.view != View::Hex {
+            return;
+        }
+        self.source_scroll = hex_line_of(top, base, width);
+    }
+
+    /// Changes the splits, then fits the hex lines to the source pane's new width.
+    fn resize(&mut self, change: impl FnOnce(&mut Splits)) {
+        change(&mut self.splits);
+        self.fit_hex();
     }
 
     /// The row at the `More` row's place after its group's next page loaded, any other row unchanged.
@@ -255,7 +301,7 @@ impl App {
         if self.search.query.trim().is_empty() {
             return;
         }
-        self.search.hits = self.matches();
+        self.rematch();
     }
 
     fn key_context(&self) -> KeyContext {
@@ -298,10 +344,27 @@ impl App {
                 self.loading = false;
                 self.reset_tree();
             }
-            Msg::NoNativeClipboard { target, text } => return vec![Cmd::Osc52 { target, text }],
-            Msg::Resize(width, height) => self.size = (width, height),
+            Msg::NoNativeClipboard {
+                target,
+                partial,
+                text,
+            } => {
+                return vec![Cmd::Osc52 {
+                    target,
+                    partial,
+                    text,
+                }]
+            }
+            Msg::Resize(width, height) => {
+                self.size = (width, height);
+                self.fit_hex();
+            }
             Msg::Tick => self.tick(),
-            Msg::Copied { target, result } => self.copied(target, result),
+            Msg::Copied {
+                target,
+                partial,
+                result,
+            } => self.copied(target, partial, result),
         }
         Vec::new()
     }
@@ -321,12 +384,12 @@ impl App {
         self.apply(intent)
     }
 
-    fn copied(&mut self, target: YankTarget, result: Result<Transport, String>) {
-        let name = target.name();
+    fn copied(&mut self, target: YankTarget, partial: bool, result: Result<Transport, String>) {
+        let what = copied_name(target, partial);
         match result {
-            Ok(Transport::Native) => self.toast(format!("Copied {name}")),
-            Ok(Transport::Osc52) => self.toast(format!("Copied {name} through the terminal")),
-            Err(error) => self.problem(format!("Could not copy {name}: {error}")),
+            Ok(Transport::Native) => self.toast(format!("Copied {what}")),
+            Ok(Transport::Osc52) => self.toast(format!("Copied {what} through the terminal")),
+            Err(error) => self.problem(format!("Could not copy {}: {error}", target.name())),
         }
     }
 
@@ -370,11 +433,11 @@ impl App {
             }
             Action::SearchChar(c) => {
                 self.search.query.push(c);
-                self.search.hits = self.matches();
+                self.rematch();
             }
             Action::SearchBackspace => {
                 self.search.query.pop();
-                self.search.hits = self.matches();
+                self.rematch();
             }
             Action::SearchCancel => self.search.editing = false,
             Action::SearchAccept => self.accept_search(),
@@ -384,14 +447,18 @@ impl App {
             Action::YankCancel => self.yanking = false,
             Action::Yank(target) => return self.yank(target),
             Action::Help => self.help = true,
-            Action::ResizeLeft => self.splits.tree = step(self.splits.tree, false, TREE_SPLIT),
-            Action::ResizeRight => self.splits.tree = step(self.splits.tree, true, TREE_SPLIT),
-            Action::ResizeUp => {
-                self.splits.right_top = step(self.splits.right_top, false, RIGHT_TOP_SPLIT);
+            Action::ResizeLeft => {
+                self.resize(|splits| splits.tree = step(splits.tree, false, TREE_SPLIT));
             }
-            Action::ResizeDown => {
-                self.splits.right_top = step(self.splits.right_top, true, RIGHT_TOP_SPLIT);
+            Action::ResizeRight => {
+                self.resize(|splits| splits.tree = step(splits.tree, true, TREE_SPLIT));
             }
+            Action::ResizeUp => self.resize(|splits| {
+                splits.right_top = step(splits.right_top, false, RIGHT_TOP_SPLIT);
+            }),
+            Action::ResizeDown => self.resize(|splits| {
+                splits.right_top = step(splits.right_top, true, RIGHT_TOP_SPLIT);
+            }),
             Action::Noop => {}
         }
         Vec::new()
@@ -527,12 +594,13 @@ impl App {
     fn line_at_same_offset(&self) -> usize {
         let offsets = self.source.offsets(&self.doc);
         let base = self.source.bytes.start;
+        let width = self.source.bytes_per_line;
         if self.view == View::Hex {
-            let offset = base.saturating_add(self.source_scroll.saturating_mul(16));
+            let offset = base.saturating_add(self.source_scroll.saturating_mul(width));
             return pair_line_of(&offsets, offset);
         }
         let offset = offsets.get(self.source_scroll).copied().unwrap_or(base);
-        hex_line_of(offset, base).min(self.source.line_count(View::Hex).saturating_sub(1))
+        hex_line_of(offset, base, width).min(self.source.line_count(View::Hex).saturating_sub(1))
     }
 
     /// Rows whose label, layer, handle or text hold the query, in tree order, folded or not.
@@ -553,39 +621,58 @@ impl App {
             .collect()
     }
 
-    fn accept_search(&mut self) {
-        self.search.editing = false;
+    /// Recomputes the hits; the position stays on its row while that row is still a hit, and is none otherwise.
+    fn rematch(&mut self) {
+        let row = self
+            .search
+            .current
+            .and_then(|position| self.search.hits.get(position).copied());
         self.search.hits = self.matches();
-        if self.search.query.trim().is_empty() {
-            return;
-        }
+        self.search.current =
+            row.and_then(|row| self.search.hits.iter().position(|hit| *hit == row));
+    }
+
+    /// Position in `hits` of the first hit at the selection or past it in the given direction, wrapping around.
+    fn hit_from_selection(&self, forward: bool) -> Option<usize> {
         let hits: HashSet<usize> = self.search.hits.iter().copied().collect();
-        let Some(hit) = std::iter::once(self.selected)
-            .chain(self.cycle_from_selection(true))
-            .find(|row| hits.contains(row))
-        else {
-            self.problem(format!("Nothing matches \"{}\"", self.search.query));
+        let row = std::iter::once(self.selected)
+            .chain(self.cycle_from_selection(forward))
+            .find(|row| hits.contains(row))?;
+        self.search.hits.iter().position(|hit| *hit == row)
+    }
+
+    /// Selects the hit at `position` in `hits` and makes it the current one.
+    fn go_to_hit(&mut self, position: usize) {
+        let Some(hit) = self.search.hits.get(position).copied() else {
             return;
         };
-        self.search.current = self
-            .search
-            .hits
-            .iter()
-            .position(|row| *row == hit)
-            .unwrap_or(0);
+        self.search.current = Some(position);
         self.select(hit);
     }
 
-    fn step_hit(&mut self, forward: bool) {
-        let count = self.search.hits.len();
-        if count == 0 {
+    fn accept_search(&mut self) {
+        self.search.editing = false;
+        self.rematch();
+        if self.search.query.trim().is_empty() {
             return;
         }
-        self.search.current = cycle(self.search.current, count, forward);
-        let Some(hit) = self.search.hits.get(self.search.current).copied() else {
+        let Some(position) = self.hit_from_selection(true) else {
+            self.problem(format!("Nothing matches \"{}\"", self.search.query));
             return;
         };
-        self.select(hit);
+        self.go_to_hit(position);
+    }
+
+    /// Goes to the next or previous hit, or with no current hit to the first one at the selection or past it.
+    fn step_hit(&mut self, forward: bool) {
+        let next = match self.search.current {
+            Some(position) => Some(cycle(position, self.search.hits.len(), forward)),
+            None => self.hit_from_selection(forward),
+        };
+        let Some(next) = next else {
+            return;
+        };
+        self.go_to_hit(next);
     }
 
     fn yank(&mut self, target: YankTarget) -> Vec<Cmd> {
@@ -595,8 +682,21 @@ impl App {
             self.problem(format!("This row has no {}", target.name()));
             return Vec::new();
         }
-        vec![Cmd::Copy { target, text }]
+        let partial = target == YankTarget::Hex && self.source.more > 0;
+        vec![Cmd::Copy {
+            target,
+            partial,
+            text,
+        }]
     }
+}
+
+/// The target's name in a done-copy toast; a partial copy names the share of the record it holds.
+fn copied_name(target: YankTarget, partial: bool) -> String {
+    if !partial {
+        return target.name().to_owned();
+    }
+    format!("{} (first {} KiB)", target.name(), SOURCE_LIMIT / 1024)
 }
 
 /// The position after `index` in a cycle of `count`, or before it when not `forward`; 0 in an empty cycle.
@@ -627,6 +727,7 @@ mod tests {
     use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
     use super::*;
+    use crate::ui::status_text;
 
     const TITLE: &str = "TITLE=PUMP STATION P-101 GENERAL ARRANGEMENT";
 
@@ -818,7 +919,7 @@ mod tests {
         assert!(!app.search.editing);
         let hits = app.search.hits.clone();
         assert_eq!(app.selected, hits[0]);
-        assert_eq!(app.search.current, 0);
+        assert_eq!(app.search.current, Some(0));
         assert!(matches!(
             app.outline.rows[app.selected].kind,
             RowKind::TextItem(..)
@@ -831,14 +932,14 @@ mod tests {
 
         press(&mut app, KeyCode::Char('n'));
         assert_eq!(app.selected, hits[1]);
-        assert_eq!(app.search.current, 1);
+        assert_eq!(app.search.current, Some(1));
         assert_eq!(label(&app), "TAG=P-101");
         assert!(app.is_expanded(row(&app, &["Text", "attributes"])));
         press(&mut app, KeyCode::Char('N'));
         assert_eq!(app.selected, hits[0]);
         press(&mut app, KeyCode::Char('N'));
         assert_eq!(app.selected, hits[3]);
-        assert_eq!(app.search.current, 3);
+        assert_eq!(app.search.current, Some(3));
         press(&mut app, KeyCode::Char('n'));
         assert_eq!(app.selected, hits[0]);
 
@@ -847,7 +948,7 @@ mod tests {
         type_text(&mut app, "P-10");
         press(&mut app, KeyCode::Enter);
         assert_eq!(app.selected, hits[2]);
-        assert_eq!(app.search.current, 2);
+        assert_eq!(app.search.current, Some(2));
 
         app.select(hits[3]);
         press(&mut app, KeyCode::Char('j'));
@@ -857,7 +958,7 @@ mod tests {
         press(&mut app, KeyCode::Enter);
         assert_eq!(app.selected, hits[0]);
 
-        assert_eq!(app.search.current, 0);
+        assert_eq!(app.search.current, Some(0));
         press(&mut app, KeyCode::Char('/'));
         assert!(app.search.query.is_empty());
         assert_eq!(app.search.hits, hits);
@@ -874,6 +975,170 @@ mod tests {
         assert!(!app.search.editing);
         assert_eq!(app.search.hits, hits);
         assert_eq!(app.selected, hits[1]);
+    }
+
+    #[test]
+    fn a_new_query_drops_the_match_position_so_the_status_never_counts_past_the_hits() {
+        let mut app = loaded(&demo());
+        press(&mut app, KeyCode::Char('/'));
+        type_text(&mut app, "p-10");
+        press(&mut app, KeyCode::Enter);
+        for _ in 0..3 {
+            press(&mut app, KeyCode::Char('n'));
+        }
+        assert_eq!(app.search.current, Some(3));
+        let status = status_text(&app);
+        assert!(status.ends_with("match 4 of 4   n next"), "{status}");
+        let left = app.selected;
+
+        press(&mut app, KeyCode::Char('/'));
+        type_text(&mut app, "walls");
+        press(&mut app, KeyCode::Esc);
+        assert_eq!(app.search.hits.len(), 2);
+        assert_eq!(app.search.current, None);
+        assert_eq!(app.selected, left);
+        let status = status_text(&app);
+        assert!(!status.contains("match 4 of 2"), "{status}");
+        assert!(status.ends_with("2 matches   n next"), "{status}");
+
+        let walls = app.search.hits.clone();
+        press(&mut app, KeyCode::Char('n'));
+        assert_eq!(app.selected, walls[0]);
+        assert_eq!(app.search.current, Some(0));
+        let status = status_text(&app);
+        assert!(status.ends_with("match 1 of 2   n next"), "{status}");
+        press(&mut app, KeyCode::Char('n'));
+        assert_eq!(app.selected, walls[1]);
+    }
+
+    #[test]
+    fn n_after_escaping_the_prompt_goes_to_the_first_hit_at_or_after_the_selection() {
+        let doc = demo();
+        let mut app = loaded(&doc);
+        press(&mut app, KeyCode::Char('/'));
+        type_text(&mut app, "walls");
+        press(&mut app, KeyCode::Esc);
+        let hits = app.search.hits.clone();
+        assert_eq!(hits.len(), 2);
+        assert_eq!(app.selected, ROOT);
+        press(&mut app, KeyCode::Char('n'));
+        assert_eq!(app.selected, hits[0]);
+        assert_eq!(app.search.current, Some(0));
+
+        let mut on_hit = loaded(&doc);
+        on_hit.select(hits[1]);
+        press(&mut on_hit, KeyCode::Char('/'));
+        type_text(&mut on_hit, "walls");
+        press(&mut on_hit, KeyCode::Esc);
+        press(&mut on_hit, KeyCode::Char('n'));
+        assert_eq!(on_hit.selected, hits[1]);
+        assert_eq!(on_hit.search.current, Some(1));
+        press(&mut on_hit, KeyCode::Char('n'));
+        assert_eq!(on_hit.selected, hits[0]);
+
+        let mut backward = loaded(&doc);
+        press(&mut backward, KeyCode::Char('/'));
+        type_text(&mut backward, "walls");
+        press(&mut backward, KeyCode::Esc);
+        press(&mut backward, KeyCode::Char('N'));
+        assert_eq!(backward.selected, hits[1]);
+        assert_eq!(backward.search.current, Some(1));
+    }
+
+    #[test]
+    fn loading_a_page_keeps_the_match_position_on_its_row() {
+        let bytes = (0..700)
+            .fold(DxfBuilder::new().layer("LINEWORK", 7), |builder, step| {
+                let y = f64::from(step);
+                builder.line((0.0, y), (1.0, y))
+            })
+            .build();
+        let doc = Arc::new(DxfDocument::load(bytes).unwrap());
+        let mut app = App::new(
+            Arc::clone(&doc),
+            "lines.dxf".to_owned(),
+            "lines.dxf".to_owned(),
+            (80, 24),
+        );
+        app.update(Msg::Loaded(Box::new(Outline::build(&doc, "lines.dxf"))));
+        let group = row(&app, &["Layouts", "Model", "LINE"]);
+        app.select(group);
+        press(&mut app, KeyCode::Enter);
+        let layer = row(&app, &["Layers", "LINEWORK"]);
+        app.select(layer);
+        press(&mut app, KeyCode::Char('/'));
+        type_text(&mut app, "line");
+        press(&mut app, KeyCode::Enter);
+        assert_eq!(app.selected, layer);
+        let before = app.search.current.unwrap();
+        assert_eq!(app.search.hits[before], layer);
+
+        let more = *app.outline.rows[group].children.last().unwrap();
+        app.select(more);
+        assert_eq!(app.outline.entities.len(), 700);
+        let after = app.search.current.unwrap();
+        assert_eq!(app.search.hits[after], layer);
+        assert_eq!(after, before + 200);
+        press(&mut app, KeyCode::Char('N'));
+        assert_eq!(app.search.current, Some(after - 1));
+    }
+
+    #[test]
+    fn hex_lines_fit_the_pane_width_and_keep_the_top_byte_across_resizes() {
+        let fitting = |width: u16| bytes_per_line(source_width((width, 24), Splits::default()));
+        assert_eq!(fitting(80), 4);
+        assert_eq!(fitting(100), 8);
+        assert_eq!(fitting(132), 8);
+        assert_eq!(fitting(160), 16);
+
+        let doc = demo();
+        let mut app = loaded(&doc);
+        app.select(row(&app, &["Text", "attributes", TITLE]));
+        let base = app.source.bytes.start;
+        let size = app.source.bytes.len();
+        assert_eq!(app.source.bytes_per_line, 4);
+        assert_eq!(app.source.hex.len(), size.div_ceil(4));
+        press(&mut app, KeyCode::Char('x'));
+        assert_eq!(app.view, View::Hex);
+        app.source_scroll = 83;
+        let top = base + 83 * 4;
+
+        app.update(Msg::Resize(100, 40));
+        assert_eq!(app.source.bytes_per_line, 8);
+        assert_eq!(app.source.hex.len(), size.div_ceil(8));
+        assert_eq!(app.source_scroll, 41);
+        let line = base + app.source_scroll * 8;
+        assert!(line <= top && top < line + 8);
+
+        app.update(Msg::Resize(160, 40));
+        assert_eq!(app.source.bytes_per_line, 16);
+        assert_eq!(app.source.hex.len(), size.div_ceil(16));
+        assert_eq!(app.source_scroll, 20);
+        let line = base + app.source_scroll * 16;
+        assert!(line <= top && top < line + 16);
+        assert!(app.source.hex[20].starts_with(&format!("{line:08x}  ")));
+
+        app.update(Msg::Resize(160, 50));
+        assert_eq!(app.source_scroll, 20);
+        for _ in 0..6 {
+            press_with(&mut app, KeyCode::Right, KeyModifiers::ALT);
+        }
+        assert_eq!(app.splits.tree, *TREE_SPLIT.end());
+        assert_eq!(app.source.bytes_per_line, 4);
+        assert_eq!(app.source.hex.len(), size.div_ceil(4));
+        assert_eq!(app.source_scroll, 80);
+        assert!(app.source.hex[80].starts_with(&format!("{line:08x}  ")));
+
+        let offsets = app.source.offsets(&doc);
+        press(&mut app, KeyCode::Char('x'));
+        assert_eq!(app.view, View::Pairs);
+        let pair = app.source_scroll;
+        assert_eq!(pair, pair_line_of(&offsets, line));
+        app.update(Msg::Resize(300, 50));
+        assert_eq!(app.source.bytes_per_line, 16);
+        assert_eq!(app.source_scroll, pair);
+        press(&mut app, KeyCode::Char('x'));
+        assert_eq!(app.source_scroll, hex_line_of(offsets[pair], base, 16));
     }
 
     #[test]
@@ -1011,19 +1276,21 @@ mod tests {
         assert_eq!(app.source_scroll, 40);
         let offsets = app.source.offsets(&doc);
         let base = app.source.bytes.start;
+        let width = app.source.bytes_per_line;
+        assert_eq!(width, 4);
 
         press(&mut app, KeyCode::Char('x'));
         assert_eq!(app.view, View::Hex);
         assert_eq!(app.focus, Pane::Source);
         let entered = app.source_scroll;
-        assert_eq!(entered, hex_line_of(offsets[40], base));
-        let line = base + entered * 16;
-        assert!(line <= offsets[40] && offsets[40] < line + 16);
+        assert_eq!(entered, hex_line_of(offsets[40], base, width));
+        let line = base + entered * width;
+        assert!(line <= offsets[40] && offsets[40] < line + width);
 
         press(&mut app, KeyCode::Char('j'));
         press(&mut app, KeyCode::Char('x'));
         assert_eq!(app.view, View::Pairs);
-        let next = base + (entered + 1) * 16;
+        let next = base + (entered + 1) * width;
         assert_eq!(app.source_scroll, pair_line_of(&offsets, next));
         assert!(offsets[app.source_scroll] >= next);
         assert!(offsets[app.source_scroll - 1] < next);
@@ -1034,7 +1301,7 @@ mod tests {
         press(&mut app, KeyCode::Char('x'));
         assert_eq!(
             app.source_scroll,
-            hex_line_of(*offsets.last().unwrap(), base)
+            hex_line_of(*offsets.last().unwrap(), base, width)
         );
     }
 
@@ -1042,11 +1309,14 @@ mod tests {
     fn switching_views_back_without_scrolling_returns_to_the_line_left() {
         let doc = demo();
         let mut app = loaded(&doc);
+        app.update(Msg::Resize(160, 24));
         app.select(row(&app, &["Text", "attributes", TITLE]));
         let offsets = app.source.offsets(&doc);
         let base = app.source.bytes.start;
-        let hex_of = |pair: usize| hex_line_of(offsets[pair], base);
-        let pair_of = |line: usize| pair_line_of(&offsets, base + line * 16);
+        let width = app.source.bytes_per_line;
+        assert_eq!(width, 16);
+        let hex_of = |pair: usize| hex_line_of(offsets[pair], base, width);
+        let pair_of = |line: usize| pair_line_of(&offsets, base + line * width);
 
         let pair = (40..offsets.len())
             .find(|pair| pair_of(hex_of(*pair)) != *pair)
@@ -1122,12 +1392,14 @@ mod tests {
             cmds,
             [Cmd::Copy {
                 target: YankTarget::Text,
+                partial: false,
                 text: "TAG=P-101".to_owned()
             }]
         );
 
         app.update(Msg::Copied {
             target: YankTarget::Text,
+            partial: false,
             result: Ok(Transport::Native),
         });
         assert_eq!(toast(&app), ("Copied text", false));
@@ -1135,22 +1407,26 @@ mod tests {
 
         let cmds = app.update(Msg::NoNativeClipboard {
             target: YankTarget::Text,
+            partial: false,
             text: "TAG=P-101".to_owned(),
         });
         assert_eq!(
             cmds,
             [Cmd::Osc52 {
                 target: YankTarget::Text,
+                partial: false,
                 text: "TAG=P-101".to_owned()
             }]
         );
         app.update(Msg::Copied {
             target: YankTarget::Text,
+            partial: false,
             result: Ok(Transport::Osc52),
         });
         assert_eq!(toast(&app), ("Copied text through the terminal", false));
         app.update(Msg::Copied {
             target: YankTarget::Hex,
+            partial: true,
             result: Err("no native clipboard".to_owned()),
         });
         assert_eq!(
