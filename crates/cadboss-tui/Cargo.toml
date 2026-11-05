@@ -1,0 +1,26 @@
+[package]
+name = "cadboss-tui"
+description = "Terminal explorer for CAD drawings: layout and block tree, entity and text inspector, DXF source and hex dump"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["cad", "dxf", "tui", "terminal", "ratatui"]
+categories = ["command-line-interface", "visualization"]
+
+[dependencies]
+cadboss-core.workspace = true
+cadboss-model.workspace = true
+cadboss-dxf.workspace = true
+ratatui = "0.29"
+crossterm = { version = "0.28", features = ["event-stream"] }
+tokio = { version = "1", features = ["rt", "macros", "sync", "time"] }
+futures-util = "0.3"
+arboard = { version = "3", default-features = false }
+base64 = "0.23"
+
+[dev-dependencies]
+cadboss-testkit = { path = "../cadboss-testkit" }
+
+[lints]
+workspace = true

@@ -155,13 +155,14 @@ The shapes that hurt most are flat: 40 000 text entities on 40 000 distinct laye
 | `crates/cadboss-model` | the format-independent document: metadata, layers, blocks, layouts, text groups, entities |
 | `crates/cadboss-dxf` | the DXF reader: tape lexer, binary and ASCII, header, tables, blocks, layouts, in-place entity decoder, text groups |
 | `crates/cadboss-output` | Markdown and JSON writers |
+| `crates/cadboss-tui` | the terminal explorer: outline, inspector, DXF source and hex dump |
 | `crates/cadboss-cli` | the `cadboss` binary and its Claude Code skill |
 | `crates/cadboss-py`, `python/cadboss` | the Python package (pyo3, maturin, abi3) |
 | `crates/cadboss-testkit` | a DXF builder for fixtures, the large-drawing generators and the demo drawing |
 | `benchmarks/` | criterion benches and the memory gate |
 | `fuzz/` | the cargo-fuzz target |
 
-`make help` lists the targets; `make ci` runs what the Rust CI runs, `make test-py` the Python tests, `make samples` downloads and verifies the sample drawings, `make package` packages the five published crates, `make fuzz` runs the fuzz target for `FUZZ_SECONDS`.
+`make help` lists the targets; `make ci` runs what the Rust CI runs, `make test-py` the Python tests, `make samples` downloads and verifies the sample drawings, `make package` packages the six published crates, `make fuzz` runs the fuzz target for `FUZZ_SECONDS`.
 
 Cargo reuses the sources it unpacked for a crate version it verified before, so a local `make package` after changing code at the same version can build stale copies; delete the `cadboss-*` directories under the nameless registry in `~/.cargo/registry/src/` first.
 
