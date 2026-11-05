@@ -7,3 +7,4 @@ __pycache__/
 /wheels
 .superpowers/
 dist/
+.DS_Store
