@@ -5,7 +5,7 @@ use std::ops::RangeInclusive;
 use std::sync::Arc;
 
 use cadboss_dxf::DxfDocument;
-use crossterm::event::KeyEvent;
+use crossterm::event::{KeyEvent, KeyEventKind};
 
 use crate::clipboard::Transport;
 use crate::input::{action, Action, KeyContext};
@@ -68,6 +68,13 @@ pub struct Toast {
     pub problem: bool,
 }
 
+/// The scroll lines of the last view switch: the line left in the old view and the line entered in the new one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ViewSwitch {
+    left: usize,
+    entered: usize,
+}
+
 pub struct App {
     pub title: String,
     /// The path as given on the command line, for copied shell commands.
@@ -96,6 +103,7 @@ pub struct App {
     pub splits: Splits,
     pub size: (u16, u16),
     pub should_quit: bool,
+    last_switch: Option<ViewSwitch>,
 }
 
 /// Rows in tree order from the file row, descending only into rows `open` accepts.
@@ -151,6 +159,7 @@ impl App {
             splits: Splits::default(),
             size,
             should_quit: false,
+            last_switch: None,
         };
         app.reset_tree();
         app
@@ -203,6 +212,7 @@ impl App {
         self.selected = row;
         self.inspector_scroll = 0;
         self.source_scroll = 0;
+        self.last_switch = None;
         self.source = source(&self.doc, self.outline.record(&self.doc, row));
     }
 
@@ -242,6 +252,9 @@ impl App {
         self.outline.load_page(&self.doc, group);
         self.order = tree_order(&self.outline, |_| true);
         self.expanded.resize(self.outline.rows.len(), false);
+        if self.search.query.trim().is_empty() {
+            return;
+        }
         self.search.hits = self.matches();
     }
 
@@ -294,6 +307,9 @@ impl App {
     }
 
     fn key(&mut self, key: KeyEvent) -> Vec<Cmd> {
+        if key.kind != KeyEventKind::Press {
+            return Vec::new();
+        }
         if self.help {
             self.help = false;
             return Vec::new();
@@ -349,10 +365,8 @@ impl App {
             Action::PrevLayout => self.next_layout(false),
             Action::ToggleHex => self.toggle_hex(),
             Action::OpenSearch => {
-                self.search = Search {
-                    editing: true,
-                    ..Search::default()
-                };
+                self.search.editing = true;
+                self.search.query.clear();
             }
             Action::SearchChar(c) => {
                 self.search.query.push(c);
@@ -493,20 +507,32 @@ impl App {
         self.select(next);
     }
 
-    /// Switches between the pairs and hex views, keeping the scroll at the same byte offset.
+    /// Switches between the pairs and hex views at the same byte offset.
+    /// Switching back without scrolling in between returns to the line that was left.
     fn toggle_hex(&mut self) {
+        let left = self.source_scroll;
+        let entered = self
+            .last_switch
+            .filter(|switch| switch.entered == left)
+            .map_or_else(|| self.line_at_same_offset(), |switch| switch.left);
+        self.view = match self.view {
+            View::Pairs => View::Hex,
+            View::Hex => View::Pairs,
+        };
+        self.source_scroll = entered;
+        self.last_switch = Some(ViewSwitch { left, entered });
+    }
+
+    /// The line of the other view at the byte offset where the current view's scroll line begins.
+    fn line_at_same_offset(&self) -> usize {
         let offsets = self.source.offsets(&self.doc);
         let base = self.source.bytes.start;
         if self.view == View::Hex {
-            self.view = View::Pairs;
             let offset = base.saturating_add(self.source_scroll.saturating_mul(16));
-            self.source_scroll = pair_line_of(&offsets, offset);
-            return;
+            return pair_line_of(&offsets, offset);
         }
-        self.view = View::Hex;
         let offset = offsets.get(self.source_scroll).copied().unwrap_or(base);
-        self.source_scroll =
-            hex_line_of(offset, base).min(self.source.line_count(View::Hex).saturating_sub(1));
+        hex_line_of(offset, base).min(self.source.line_count(View::Hex).saturating_sub(1))
     }
 
     /// Rows whose label, layer, handle or text hold the query, in tree order, folded or not.
@@ -598,7 +624,7 @@ mod tests {
     use std::path::Path;
 
     use cadboss_testkit::dxf::DxfBuilder;
-    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
     use super::*;
 
@@ -768,6 +794,10 @@ mod tests {
 
         press(&mut app, KeyCode::Char('?'));
         assert!(app.help);
+        let mut release = KeyEvent::new(KeyCode::Char('?'), KeyModifiers::NONE);
+        release.kind = KeyEventKind::Release;
+        assert!(app.update(Msg::Key(release)).is_empty());
+        assert!(app.help);
         press(&mut app, KeyCode::Char('j'));
         assert!(!app.help);
         assert_eq!(app.selected, title);
@@ -827,15 +857,23 @@ mod tests {
         press(&mut app, KeyCode::Enter);
         assert_eq!(app.selected, hits[0]);
 
-        let before = app.selected;
+        assert_eq!(app.search.current, 0);
         press(&mut app, KeyCode::Char('/'));
-        assert!(app.search.hits.is_empty());
+        assert!(app.search.query.is_empty());
+        assert_eq!(app.search.hits, hits);
+        press(&mut app, KeyCode::Esc);
+        assert!(!app.search.editing);
+        assert!(!app.should_quit);
+        assert_eq!(app.selected, hits[0]);
+        press(&mut app, KeyCode::Char('n'));
+        assert_eq!(app.selected, hits[1]);
+
+        press(&mut app, KeyCode::Char('/'));
         type_text(&mut app, "p-10");
         press(&mut app, KeyCode::Esc);
         assert!(!app.search.editing);
         assert_eq!(app.search.hits, hits);
-        assert_eq!(app.selected, before);
-        assert!(!app.should_quit);
+        assert_eq!(app.selected, hits[1]);
     }
 
     #[test]
@@ -977,15 +1015,19 @@ mod tests {
         press(&mut app, KeyCode::Char('x'));
         assert_eq!(app.view, View::Hex);
         assert_eq!(app.focus, Pane::Source);
-        let line = base + app.source_scroll * 16;
+        let entered = app.source_scroll;
+        assert_eq!(entered, hex_line_of(offsets[40], base));
+        let line = base + entered * 16;
         assert!(line <= offsets[40] && offsets[40] < line + 16);
 
+        press(&mut app, KeyCode::Char('j'));
         press(&mut app, KeyCode::Char('x'));
         assert_eq!(app.view, View::Pairs);
-        let back = app.source_scroll;
-        assert!(back <= 40);
-        assert!(offsets[back] >= line);
-        assert!(offsets[back - 1] < line);
+        let next = base + (entered + 1) * 16;
+        assert_eq!(app.source_scroll, pair_line_of(&offsets, next));
+        assert!(offsets[app.source_scroll] >= next);
+        assert!(offsets[app.source_scroll - 1] < next);
+        assert_ne!(app.source_scroll, 40);
 
         press(&mut app, KeyCode::Char('G'));
         assert_eq!(app.source_scroll, offsets.len() - 1);
@@ -994,6 +1036,52 @@ mod tests {
             app.source_scroll,
             hex_line_of(*offsets.last().unwrap(), base)
         );
+    }
+
+    #[test]
+    fn switching_views_back_without_scrolling_returns_to_the_line_left() {
+        let doc = demo();
+        let mut app = loaded(&doc);
+        app.select(row(&app, &["Text", "attributes", TITLE]));
+        let offsets = app.source.offsets(&doc);
+        let base = app.source.bytes.start;
+        let hex_of = |pair: usize| hex_line_of(offsets[pair], base);
+        let pair_of = |line: usize| pair_line_of(&offsets, base + line * 16);
+
+        let pair = (40..offsets.len())
+            .find(|pair| pair_of(hex_of(*pair)) != *pair)
+            .unwrap();
+        app.source_scroll = pair;
+        press(&mut app, KeyCode::Char('x'));
+        assert_eq!(app.source_scroll, hex_of(pair));
+        press(&mut app, KeyCode::Char('x'));
+        assert_eq!(app.view, View::Pairs);
+        assert_eq!(app.source_scroll, pair);
+        press(&mut app, KeyCode::Char('x'));
+        assert_eq!(app.source_scroll, hex_of(pair));
+        press(&mut app, KeyCode::Char('x'));
+        assert_eq!(app.source_scroll, pair);
+
+        let line = (0..app.source.hex.len())
+            .find(|line| hex_of(pair_of(*line)) != *line)
+            .unwrap();
+        press(&mut app, KeyCode::Char('x'));
+        app.source_scroll = line;
+        press(&mut app, KeyCode::Char('x'));
+        assert_eq!(app.view, View::Pairs);
+        assert_eq!(app.source_scroll, pair_of(line));
+        press(&mut app, KeyCode::Char('x'));
+        assert_eq!(app.view, View::Hex);
+        assert_eq!(app.source_scroll, line);
+
+        press(&mut app, KeyCode::Char('x'));
+        assert_eq!(app.source_scroll, pair_of(line));
+        app.select(app.selected);
+        assert_eq!(app.source_scroll, 0);
+        app.source_scroll = pair_of(line);
+        press(&mut app, KeyCode::Char('x'));
+        assert_eq!(app.source_scroll, hex_of(pair_of(line)));
+        assert_ne!(app.source_scroll, line);
     }
 
     #[test]

@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use cadboss_core::{Budget, Error, Report, Result};
 
-use crate::binary::{is_chunk, lex_binary, SENTINEL};
+use crate::binary::{is_chunk, lex_binary, value_kind, ValueKind, SENTINEL};
 use crate::lexer::lex_ascii;
 
 /// One group-code/value pair: the value bytes live in the input at `offset..offset + len`.
@@ -183,6 +183,16 @@ impl Tape {
         std::str::from_utf8(value).ok()?.trim().parse().ok()
     }
 
+    /// A value as text: a binary float or integer as its number, anything else as lossy UTF-8 of its bytes.
+    pub fn display_value(&self, code: i16, value: &[u8]) -> String {
+        let typed = match (self.is_binary(), value_kind(code)) {
+            (false, _) | (_, ValueKind::Text) => None,
+            (true, ValueKind::Float) => self.f64(value).map(|number| number.to_string()),
+            (true, ValueKind::Integer) => self.i64(value).map(|number| number.to_string()),
+        };
+        typed.unwrap_or_else(|| String::from_utf8_lossy(value).into_owned())
+    }
+
     pub fn pairs(&self, range: Range<u32>) -> impl Iterator<Item = (u32, i16)> + '_ {
         range.filter_map(|index| {
             self.tokens
@@ -336,5 +346,39 @@ mod tests {
             tape.byte_range(start..end, &bytes).end,
             tape.token_start(end, &bytes)
         );
+    }
+
+    #[test]
+    fn display_value_prints_binary_numbers_and_ascii_values_as_written() {
+        let ascii =
+            b"  0\nSECTION\n  2\nENTITIES\n  0\nLINE\n 10\n1.50\n 62\n  7\n  0\nENDSEC\n  0\nEOF\n";
+        let (tape, _) = Tape::lex(ascii, &Budget::default()).unwrap();
+        let shown: Vec<String> = (0..tape.len())
+            .map(|index| tape.display_value(tape.code(index), tape.value(index, ascii)))
+            .collect();
+        assert!(shown.contains(&"1.50".to_owned()));
+        assert!(shown.contains(&"LINE".to_owned()));
+
+        let bytes = cadboss_testkit::dxf::DxfBuilder::new()
+            .line((0.0, 0.5), (12.25, 3.0))
+            .binary()
+            .build();
+        let (tape, _) = Tape::lex(&bytes, &Budget::default()).unwrap();
+        let shown: Vec<(i16, String)> = (0..tape.len())
+            .map(|index| {
+                let code = tape.code(index);
+                (code, tape.display_value(code, tape.value(index, &bytes)))
+            })
+            .collect();
+        assert!(shown.contains(&(0, "LINE".to_owned())));
+        assert!(shown.contains(&(20, "0.5".to_owned())));
+        assert!(shown.contains(&(11, "12.25".to_owned())));
+        let integers: Vec<&String> = shown
+            .iter()
+            .filter(|(code, _)| matches!(value_kind(*code), ValueKind::Integer))
+            .map(|(_, text)| text)
+            .collect();
+        assert!(!integers.is_empty());
+        assert!(integers.iter().all(|text| text.parse::<i64>().is_ok()));
     }
 }

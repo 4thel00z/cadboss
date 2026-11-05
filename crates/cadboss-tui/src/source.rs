@@ -2,7 +2,7 @@
 
 use std::ops::Range;
 
-use cadboss_dxf::{value_kind, Cursor, DxfDocument, ValueKind};
+use cadboss_dxf::DxfDocument;
 
 /// Bytes of a record the source pane lays out; the rest is only counted.
 pub const SOURCE_LIMIT: usize = 64 * 1024;
@@ -52,14 +52,14 @@ pub fn source(doc: &DxfDocument, tokens: Option<Range<u32>>) -> Source {
     let tape = doc.tape();
     let bytes = tape.byte_range(tokens.clone(), doc.bytes());
     let end = bytes.end.min(bytes.start.saturating_add(SOURCE_LIMIT));
-    let reader = Cursor::new(tape, doc.bytes(), 0..0);
-    let binary = tape.is_binary();
     let pairs = tape
         .pairs(tokens.clone())
         .take_while(|(index, _)| tape.token_start(*index, doc.bytes()) < end)
         .map(|(index, code)| {
-            let value = display(&reader, binary, code, tape.value(index, doc.bytes()));
-            (code, value)
+            (
+                code,
+                tape.display_value(code, tape.value(index, doc.bytes())),
+            )
         })
         .collect();
     let hex = hex_lines(
@@ -73,16 +73,6 @@ pub fn source(doc: &DxfDocument, tokens: Option<Range<u32>>) -> Source {
         pairs,
         hex,
     }
-}
-
-/// A binary float or integer as its number, any other value as lossy UTF-8.
-fn display(reader: &Cursor<'_>, binary: bool, code: i16, value: &[u8]) -> String {
-    let typed = match (binary, value_kind(code)) {
-        (false, _) | (_, ValueKind::Text) => None,
-        (true, ValueKind::Float) => reader.f64(value).map(|number| number.to_string()),
-        (true, ValueKind::Integer) => reader.i64(value).map(|number| number.to_string()),
-    };
-    typed.unwrap_or_else(|| String::from_utf8_lossy(value).into_owned())
 }
 
 /// Sixteen bytes per line: the absolute offset, two groups of eight hex bytes and the printable ASCII.
