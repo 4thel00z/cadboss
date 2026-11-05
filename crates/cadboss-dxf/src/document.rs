@@ -301,6 +301,11 @@ impl DxfDocument {
         self.block_lookup.get(&name.to_ascii_lowercase()).copied()
     }
 
+    /// Case-insensitive definition of the block named `name`.
+    pub fn block_def(&self, name: &str) -> Option<&BlockDef> {
+        self.blocks.get(self.block_index(name)?)
+    }
+
     fn decoder<'a>(&'a self, range: Range<u32>, layout_of: &'a LayoutOf) -> EntityDecoder<'a> {
         let cursor = Cursor::new(&self.tape, self.source.bytes(), range);
         EntityDecoder::new(cursor, self.cp, &self.budget, layout_of.as_ref())

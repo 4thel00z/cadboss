@@ -1,6 +1,7 @@
 //! On-demand decoding of entity records into model entities.
 
 use std::f64::consts::TAU;
+use std::ops::Range;
 
 use cadboss_core::{Budget, Point, Report, SkipKind, SkipReason};
 use cadboss_model::{Attribute, Entity, EntityCommon, EntityKind, Text};
@@ -166,12 +167,11 @@ impl<'t> EntityDecoder<'t> {
     }
 }
 
-impl<'t> Iterator for EntityDecoder<'t> {
-    type Item = Entity;
-
-    fn next(&mut self) -> Option<Entity> {
+impl<'t> EntityDecoder<'t> {
+    /// Decodes the next entity together with the token range of its record, children included.
+    pub fn next_located(&mut self) -> Option<(Range<u32>, Entity)> {
         while !self.done {
-            let (_, name) = self.next_name()?;
+            let (start, name) = self.next_name()?;
             if is_child(name) {
                 self.report.note(SkipKind::Entity, SkipReason::Malformed);
                 continue;
@@ -185,9 +185,17 @@ impl<'t> Iterator for EntityDecoder<'t> {
                 continue;
             };
             self.decoded += 1;
-            return Some(entity);
+            return Some((start..self.cursor.index(), entity));
         }
         None
+    }
+}
+
+impl<'t> Iterator for EntityDecoder<'t> {
+    type Item = Entity;
+
+    fn next(&mut self) -> Option<Entity> {
+        self.next_located().map(|(_, entity)| entity)
     }
 }
 
@@ -669,4 +677,38 @@ fn viewport(fields: &Fields) -> Option<EntityKind> {
         view_height: fields.float(45).unwrap_or(0.0),
         frozen_layers,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use cadboss_testkit::dxf::DxfBuilder;
+
+    use crate::DxfDocument;
+
+    #[test]
+    fn next_located_returns_the_record_tokens_including_children() {
+        let bytes = DxfBuilder::new()
+            .block("B", (0.0, 0.0))
+            .line((0.0, 0.0), (1.0, 0.0))
+            .end()
+            .line((0.0, 0.0), (2.0, 2.0))
+            .insert_with_attribs("B", (1.0, 1.0), &[("TAG", "X")])
+            .build();
+        let doc = DxfDocument::load(bytes.clone()).unwrap();
+        let tape = doc.tape();
+        let mut decoder = doc.entities("Model");
+        let (line, entity) = decoder.next_located().unwrap();
+        assert_eq!(entity.display_type(), "LINE");
+        assert_eq!(tape.code(line.start), 0);
+        assert_eq!(tape.value(line.start, doc.bytes()), b"LINE");
+        let (insert, entity) = decoder.next_located().unwrap();
+        assert_eq!(entity.display_type(), "INSERT");
+        assert_eq!(insert.start, line.end);
+        let names: Vec<&[u8]> = (insert.start..insert.end)
+            .filter(|index| tape.code(*index) == 0)
+            .map(|index| tape.value(index, doc.bytes()))
+            .collect();
+        assert_eq!(names, [&b"INSERT"[..], &b"ATTRIB"[..], &b"SEQEND"[..]]);
+        assert!(decoder.next_located().is_none());
+    }
 }
