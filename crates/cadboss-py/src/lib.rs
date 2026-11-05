@@ -188,6 +188,7 @@ struct PyTextItem {
     layout: PyText,
     position: Option<Corner>,
     height: Option<f64>,
+    handle: Option<u64>,
 }
 
 impl PyTextItem {
@@ -199,6 +200,7 @@ impl PyTextItem {
             layout: PyText(item.layout.clone()),
             position: item.position.map(|point| (point.x, point.y, point.z)),
             height: item.height,
+            handle: item.handle,
         }
     }
 }
@@ -443,6 +445,7 @@ mod tests {
             layout: Text::from(layout),
             position: None,
             height: None,
+            handle: None,
         }
     }
 

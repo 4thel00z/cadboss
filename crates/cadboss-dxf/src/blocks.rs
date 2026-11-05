@@ -15,6 +15,7 @@ const XREF: i64 = 4;
 pub struct BlockDef {
     pub block: Block,
     pub handle: u64,
+    pub header: Range<u32>,
     pub entities: Range<u32>,
 }
 
@@ -28,6 +29,7 @@ pub fn read_blocks(tape: &Tape, bytes: &[u8], cp: Codepage, report: &mut Report)
         if code != 0 || value != b"BLOCK" {
             continue;
         }
+        let header_start = cursor.index() - 1;
         let head = Record::until(&mut cursor, 0);
         let start = cursor.index();
         let end = loop {
@@ -77,8 +79,30 @@ pub fn read_blocks(tape: &Tape, bytes: &[u8], cp: Codepage, report: &mut Report)
                 .first(5)
                 .and_then(|value| head.handle(value))
                 .unwrap_or(0),
+            header: header_start..start,
             entities: start..end,
         });
     }
     blocks
+}
+
+#[cfg(test)]
+mod tests {
+    use cadboss_testkit::dxf::DxfBuilder;
+
+    use crate::DxfDocument;
+
+    #[test]
+    fn block_header_is_the_block_record_before_its_entities() {
+        let bytes = DxfBuilder::new()
+            .block("PUMP", (0.0, 0.0))
+            .circle((0.0, 0.0), 1.0)
+            .end()
+            .build();
+        let doc = DxfDocument::load(bytes).unwrap();
+        let def = doc.block_def("pump").unwrap();
+        assert_eq!(doc.tape().value(def.header.start, doc.bytes()), b"BLOCK");
+        assert_eq!(def.header.end, def.entities.start);
+        assert!(def.header.len() > 1);
+    }
 }

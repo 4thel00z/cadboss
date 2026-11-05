@@ -128,3 +128,12 @@ def test_undecodable_block_names_come_back_as_bytes() -> None:
     assert isinstance(doc.version, str)
     assert doc.version == "AC1015"
     assert doc.blocks == [name]
+
+
+def test_text_items_expose_their_handle(simple_dxf_bytes: bytes) -> None:
+    doc = Document.load(simple_dxf_bytes)
+    items = doc.text()
+    assert items
+    assert all(item.handle is None or isinstance(item.handle, int) for item in items)
+    assert any(item.handle is not None for item in items)
+    assert all(item.handle is None for item in doc.text("names"))

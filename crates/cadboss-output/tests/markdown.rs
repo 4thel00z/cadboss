@@ -45,6 +45,7 @@ fn item(text: Text, layer: &str, height: Option<f64>) -> TextItem {
         layout: "Model".into(),
         position: None,
         height,
+        handle: None,
     }
 }
 

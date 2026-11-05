@@ -1,0 +1,1021 @@
+//! Rendering: the layout, one painter per pane, the header and status bar, and the copy and key popups.
+
+use std::ops::RangeInclusive;
+
+use cadboss_dxf::{value_kind, ValueKind};
+use cadboss_model::Metadata;
+use ratatui::layout::{Alignment, Constraint, Flex, Layout, Margin, Rect};
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{
+    Block, BorderType, Clear, Padding, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
+    Wrap,
+};
+use ratatui::Frame;
+
+use crate::app::{App, Pane, Toast};
+use crate::inspector::{inspector_lines, inspector_title};
+use crate::outline::{counted, RowKind};
+use crate::source::View;
+use crate::theme::Theme;
+use crate::yank::{yank_text, YankTarget, TARGETS};
+
+/// The screen areas: a header line, the outline, the inspector above the source, a status line.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Panes {
+    pub header: Rect,
+    pub tree: Rect,
+    pub inspector: Rect,
+    pub source: Rect,
+    pub status: Rect,
+}
+
+/// The two pane dividers as percentages: the tree column's width and the inspector's share of the right column.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Splits {
+    pub tree: u16,
+    pub right_top: u16,
+}
+
+impl Default for Splits {
+    fn default() -> Splits {
+        Splits {
+            tree: 42,
+            right_top: 62,
+        }
+    }
+}
+
+pub const SPLIT_STEP: u16 = 5;
+pub const TREE_SPLIT: RangeInclusive<u16> = 15..=70;
+pub const RIGHT_TOP_SPLIT: RangeInclusive<u16> = 20..=85;
+/// Spinner frames shown while the outline is built, one per tick.
+pub const SPINNER: [char; 10] = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+/// The narrowest label a tree row keeps before it drops its detail column.
+const LABEL_ROOM: usize = 18;
+/// Blank columns kept between the left and right parts of the header and the status bar.
+const BAR_GAP: usize = 2;
+/// Blank columns inside each side border of the source pane.
+const SOURCE_PADDING: u16 = 1;
+const COPY_POPUP: (u16, u16) = (76, 11);
+const KEYS_POPUP: (u16, u16) = (64, 15);
+const HINTS: [(&str, &str); 6] = [
+    ("/", "search"),
+    ("]", "next layout"),
+    ("x", "hex"),
+    ("y", "copy"),
+    ("?", "keys"),
+    ("q", "quit"),
+];
+const KEYS: [(&str, &str); 12] = [
+    ("↑ ↓  j k", "move, or scroll the focused pane"),
+    ("← →  h l", "fold, or go to the parent or first child"),
+    ("enter", "fold, unfold, or load more entities"),
+    ("g G", "first row, last row"),
+    ("tab", "focus outline, inspector, source in turn"),
+    ("/", "search names, text, layers and handles"),
+    ("n N", "next, previous match"),
+    ("] [", "next, previous layout"),
+    ("x", "source as DXF pairs or hex"),
+    ("y", "copy text, layer, handle, DXF, hex, a query"),
+    ("alt arrows", "resize the panes"),
+    ("q esc", "quit"),
+];
+
+pub fn panes(area: Rect, splits: Splits) -> Panes {
+    let [header, body, status] = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Min(0),
+        Constraint::Length(1),
+    ])
+    .areas(area);
+    let [tree, right] = Layout::horizontal([
+        Constraint::Percentage(splits.tree),
+        Constraint::Percentage(100u16.saturating_sub(splits.tree)),
+    ])
+    .areas(body);
+    let [inspector, source] = Layout::vertical([
+        Constraint::Percentage(splits.right_top),
+        Constraint::Percentage(100u16.saturating_sub(splits.right_top)),
+    ])
+    .areas(right);
+    Panes {
+        header,
+        tree,
+        inspector,
+        source,
+        status,
+    }
+}
+
+/// Columns the source pane lays its lines out in on a `size` screen, inside its borders and padding.
+pub fn source_width(size: (u16, u16), splits: Splits) -> usize {
+    let area = panes(Rect::new(0, 0, size.0, size.1), splits).source;
+    usize::from(area.width.saturating_sub(2 + 2 * SOURCE_PADDING))
+}
+
+/// Paints the whole screen. The inspector and source scroll offsets are clamped to their content and written back.
+pub fn draw(app: &mut App, frame: &mut Frame) {
+    let split = panes(frame.area(), app.splits);
+    draw_inspector(app, frame, split.inspector);
+    draw_source(app, frame, split.source);
+    let app = &*app;
+    draw_header(app, frame, split.header);
+    draw_tree(app, frame, split.tree);
+    draw_status(app, frame, split.status);
+    if app.yanking {
+        draw_yank(app, frame);
+    }
+    if app.help {
+        draw_help(app, frame);
+    }
+}
+
+/// `text` cut to `width` characters, ending in `…` when cut.
+fn fit(text: &str, width: usize) -> String {
+    if text.chars().count() <= width {
+        return text.to_owned();
+    }
+    let kept: String = text.chars().take(width.saturating_sub(1)).collect();
+    format!("{kept}…")
+}
+
+/// `text` with control characters shown as `.`, so bytes from the file never reach the terminal as escapes.
+pub(crate) fn printable(text: &str) -> String {
+    text.chars().map(visible).collect()
+}
+
+fn visible(c: char) -> char {
+    if c.is_control() {
+        return '.';
+    }
+    c
+}
+
+fn pane(theme: &Theme, title: &str, focused: bool) -> Block<'static> {
+    let (border, heading) = pane_styles(theme, focused);
+    Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(border)
+        .title(Span::styled(format!(" {} ", printable(title)), heading))
+}
+
+fn pane_styles(theme: &Theme, focused: bool) -> (Style, Style) {
+    if focused {
+        return (theme.fg(theme.accent), theme.bold().fg(theme.accent));
+    }
+    (theme.fg(theme.border), theme.bold().fg(Color::Reset))
+}
+
+pub(crate) fn entity_total(metadata: &Metadata) -> u64 {
+    metadata
+        .entity_counts
+        .iter()
+        .fold(0, |total, (_, count)| total.saturating_add(*count))
+}
+
+fn spinner(ticks: u64) -> char {
+    let index = usize::try_from(ticks % SPINNER.len() as u64).unwrap_or(0);
+    SPINNER.get(index).copied().unwrap_or(' ')
+}
+
+/// The chip, the file name, the format, the units and, once loaded, the counts.
+/// While the line is wider than `room` the units, then the counts, are left out.
+fn header_left(app: &App, room: usize) -> Line<'static> {
+    let theme = &app.theme;
+    let metadata = &app.outline.document.metadata;
+    let head = [
+        Span::styled(" cadboss ", theme.chip(theme.accent)),
+        Span::raw("  "),
+        Span::styled(printable(&app.title), theme.bold()),
+        Span::styled(
+            printable(&format!(
+                "   {} {}",
+                metadata.format.label(),
+                metadata.version
+            )),
+            theme.muted(),
+        ),
+    ];
+    let units = Span::styled(format!("   {}", metadata.units.label()), theme.muted());
+    let counts = (!app.loading).then(|| {
+        Span::styled(
+            format!(
+                "   {} in {}",
+                counted(entity_total(metadata), "entity", "entities"),
+                counted(u64::from(metadata.layout_count), "layout", "layouts")
+            ),
+            theme.muted(),
+        )
+    });
+    let optional: Vec<Span<'static>> = std::iter::once(units).chain(counts).collect();
+    let candidates = (0..=optional.len())
+        .map(|dropped| {
+            let kept = optional.iter().skip(dropped);
+            Line::from(head.iter().chain(kept).cloned().collect::<Vec<_>>())
+        })
+        .collect();
+    first_fitting(candidates, room)
+}
+
+/// The first candidate no wider than `room`, else the last one; candidates run from fullest to barest.
+fn first_fitting(candidates: Vec<Line<'static>>, room: usize) -> Line<'static> {
+    let last = candidates.len().saturating_sub(1);
+    let index = candidates
+        .iter()
+        .position(|line| line.width() <= room)
+        .unwrap_or(last);
+    candidates.into_iter().nth(index).unwrap_or_default()
+}
+
+/// The spinner while loading, then the text item count and the skipped count when the report has notes.
+fn header_right(app: &App) -> Line<'static> {
+    let theme = &app.theme;
+    if app.loading {
+        return Line::styled(
+            format!("{} reading the drawing ", spinner(app.ticks)),
+            theme.muted(),
+        );
+    }
+    let document = &app.outline.document;
+    let items = Span::styled(
+        format!("{} text items ", document.text.len()),
+        theme.muted(),
+    );
+    let report = &document.report;
+    if report.is_empty() {
+        return Line::from(items);
+    }
+    let skipped = report.skipped.iter().fold(report.unlisted, |total, entry| {
+        total.saturating_add(entry.count)
+    });
+    Line::from(vec![
+        items,
+        Span::styled(
+            format!("  ! {skipped} skipped "),
+            theme.fg(theme.warning).add_modifier(Modifier::BOLD),
+        ),
+    ])
+}
+
+/// One line with `left` at the start and `right` flush with the end.
+fn spread(frame: &mut Frame, area: Rect, left: Line<'static>, right: Line<'static>) {
+    let width = u16::try_from(right.width()).unwrap_or(u16::MAX);
+    let [left_area, right_area] =
+        Layout::horizontal([Constraint::Min(0), Constraint::Length(width)]).areas(area);
+    frame.render_widget(Paragraph::new(left), left_area);
+    frame.render_widget(
+        Paragraph::new(right).alignment(Alignment::Right),
+        right_area,
+    );
+}
+
+fn draw_header(app: &App, frame: &mut Frame, area: Rect) {
+    let right = header_right(app);
+    let room = usize::from(area.width).saturating_sub(right.width() + BAR_GAP);
+    spread(frame, area, header_left(app, room), right);
+}
+
+/// `text` as spans with every case-insensitive occurrence of `query` styled `mark`.
+fn marked(text: &str, query: &str, base: Style, mark: Style) -> Vec<Span<'static>> {
+    let lower = text.to_lowercase();
+    let needle = query.trim().to_lowercase();
+    if needle.is_empty() || lower.len() != text.len() {
+        return vec![Span::styled(text.to_owned(), base)];
+    }
+    let mut spans = Vec::new();
+    let mut at = 0;
+    for (start, found) in lower.match_indices(&needle) {
+        let end = start + found.len();
+        let (Some(before), Some(hit)) = (text.get(at..start), text.get(start..end)) else {
+            continue;
+        };
+        spans.push(Span::styled(before.to_owned(), base));
+        spans.push(Span::styled(hit.to_owned(), mark));
+        at = end;
+    }
+    spans.push(Span::styled(
+        text.get(at..).unwrap_or_default().to_owned(),
+        base,
+    ));
+    spans
+}
+
+/// Indent guides: a rule under every ancestor with siblings still to come, blank under the last ones and under the file row.
+fn guides(app: &App, index: usize) -> String {
+    app.outline
+        .ancestors(index)
+        .iter()
+        .skip(1)
+        .rev()
+        .map(|ancestor| guide(app.outline.is_last_child(*ancestor)))
+        .collect()
+}
+
+fn guide(last: bool) -> &'static str {
+    if last {
+        return "  ";
+    }
+    "│ "
+}
+
+/// A row that opens: one with children, or a type group with entities, whose rows load when it opens.
+fn opens(app: &App, index: usize) -> bool {
+    let entities = matches!(
+        app.outline.rows.get(index).map(|row| &row.kind),
+        Some(RowKind::TypeGroup { total, .. }) if *total > 0
+    );
+    entities || app.has_children(index)
+}
+
+fn fold(app: &App, index: usize) -> &'static str {
+    if !opens(app, index) {
+        return "  ";
+    }
+    if app.is_expanded(index) {
+        return "▾ ";
+    }
+    "▸ "
+}
+
+fn band(theme: &Theme, selected: bool) -> Style {
+    if selected {
+        return Style::default().bg(theme.selection);
+    }
+    Style::default()
+}
+
+fn gutter(theme: &Theme, selected: bool, band: Style) -> Span<'static> {
+    if selected {
+        return Span::styled("▌ ", band.fg(theme.accent));
+    }
+    Span::styled("  ", band)
+}
+
+/// Folders and the file row bold, type groups in `info`, `More` rows muted; the selected row bold.
+fn label_style(theme: &Theme, kind: &RowKind, band: Style, selected: bool) -> Style {
+    let style = match kind {
+        RowKind::File
+        | RowKind::LayoutsFolder
+        | RowKind::BlocksFolder
+        | RowKind::LayersFolder
+        | RowKind::TextFolder => band.add_modifier(Modifier::BOLD),
+        RowKind::TypeGroup { .. } => band.fg(theme.info),
+        RowKind::More { .. } => band.fg(theme.muted),
+        RowKind::Layout(_)
+        | RowKind::Block(_)
+        | RowKind::Layer(_)
+        | RowKind::TextGroup(_)
+        | RowKind::TextItem(..)
+        | RowKind::Entity { .. } => band,
+    };
+    if !selected {
+        return style;
+    }
+    style.add_modifier(Modifier::BOLD)
+}
+
+/// The search query when the row is a hit, so only hits get marks.
+fn hit_query(app: &App, index: usize) -> &str {
+    if !app.search.hits.contains(&index) {
+        return "";
+    }
+    &app.search.query
+}
+
+/// The label with search matches marked; an entity row's type is in `info`, apart from its layer and text.
+fn label_spans(
+    app: &App,
+    index: usize,
+    kind: &RowKind,
+    label: &str,
+    base: Style,
+) -> Vec<Span<'static>> {
+    let theme = &app.theme;
+    let query = hit_query(app, index);
+    let mark = base
+        .fg(theme.accent)
+        .add_modifier(Modifier::UNDERLINED | Modifier::BOLD);
+    let split = matches!(kind, RowKind::Entity { .. })
+        .then(|| label.find("  ").unwrap_or(label.len()))
+        .and_then(|at| label.split_at_checked(at));
+    let Some((head, rest)) = split else {
+        return marked(label, query, base, mark);
+    };
+    let mut spans = marked(head, query, base.fg(theme.info), mark);
+    spans.extend(marked(rest, query, base, mark));
+    spans
+}
+
+/// The detail column muted; a layer's frozen, off and locked flags in `warning`.
+fn detail_spans(theme: &Theme, kind: &RowKind, detail: &str, band: Style) -> Vec<Span<'static>> {
+    let muted = band.fg(theme.muted);
+    let flagged = matches!(kind, RowKind::Layer(_))
+        .then(|| detail.split_once(" · "))
+        .flatten();
+    let Some((count, flags)) = flagged else {
+        return vec![Span::styled(detail.to_owned(), muted)];
+    };
+    vec![
+        Span::styled(count.to_owned(), muted),
+        Span::styled(format!(" · {flags}"), band.fg(theme.warning)),
+    ]
+}
+
+/// Gutter, guides, fold marker, label and the right-aligned detail one column from the edge.
+/// The detail is dropped before the label gets narrower than `LABEL_ROOM`.
+fn tree_line(app: &App, index: usize, width: usize) -> Option<Line<'static>> {
+    let theme = &app.theme;
+    let row = app.outline.rows.get(index)?;
+    let selected = index == app.selected;
+    let band = band(theme, selected);
+    let width = width.saturating_sub(1);
+    let guides = guides(app, index);
+    let fold = fold(app, index);
+    let used = 2 + guides.chars().count() + fold.chars().count();
+    let detail = printable(&row.detail);
+    let detail = Some(detail)
+        .filter(|detail| width.saturating_sub(used + detail.chars().count() + 1) >= LABEL_ROOM)
+        .unwrap_or_default();
+    let room = width.saturating_sub(used + detail.chars().count() + 1);
+    let label = fit(&printable(&row.label), room);
+    let pad = width.saturating_sub(used + label.chars().count() + detail.chars().count());
+    let base = label_style(theme, &row.kind, band, selected);
+    let mut spans = vec![
+        gutter(theme, selected, band),
+        Span::styled(guides, band.fg(theme.border)),
+        Span::styled(fold, band.fg(theme.muted)),
+    ];
+    spans.extend(label_spans(app, index, &row.kind, &label, base));
+    spans.push(Span::styled(" ".repeat(pad), band));
+    spans.extend(detail_spans(theme, &row.kind, &detail, band));
+    spans.push(Span::styled(" ", band));
+    Some(Line::from(spans))
+}
+
+fn scrollbar(theme: &Theme, frame: &mut Frame, area: Rect, length: usize, position: usize) {
+    let inner = area.inner(Margin {
+        vertical: 1,
+        horizontal: 0,
+    });
+    let visible = usize::from(inner.height);
+    if inner.width == 0 || length <= visible {
+        return;
+    }
+    let mut state = ScrollbarState::new(length.saturating_sub(visible)).position(position);
+    let bar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+        .begin_symbol(None)
+        .end_symbol(None)
+        .track_symbol(Some("│"))
+        .track_style(theme.fg(theme.border))
+        .thumb_symbol("┃")
+        .thumb_style(theme.fg(theme.muted));
+    frame.render_stateful_widget(bar, inner, &mut state);
+}
+
+fn draw_tree(app: &App, frame: &mut Frame, area: Rect) {
+    let block = pane(&app.theme, "Outline", app.focus == Pane::Tree);
+    let height = usize::from(area.height.saturating_sub(2));
+    let width = usize::from(area.width.saturating_sub(2));
+    let rows = app.visible_rows();
+    let position = rows
+        .iter()
+        .position(|row| *row == app.selected)
+        .unwrap_or(0);
+    let offset = position.saturating_sub(height.saturating_sub(1));
+    let lines: Vec<Line> = rows
+        .iter()
+        .skip(offset)
+        .take(height)
+        .filter_map(|index| tree_line(app, *index, width))
+        .collect();
+    frame.render_widget(Paragraph::new(lines).block(block), area);
+    scrollbar(&app.theme, frame, area, rows.len(), offset);
+}
+
+fn draw_inspector(app: &mut App, frame: &mut Frame, area: Rect) {
+    let block = pane(
+        &app.theme,
+        &inspector_title(app),
+        app.focus == Pane::Inspector,
+    )
+    .padding(Padding::horizontal(1));
+    let inner = block.inner(area);
+    let paragraph =
+        Paragraph::new(inspector_lines(app, usize::from(inner.width))).wrap(Wrap { trim: false });
+    let last = paragraph.line_count(inner.width).saturating_sub(1);
+    app.inspector_scroll = app
+        .inspector_scroll
+        .min(u16::try_from(last).unwrap_or(u16::MAX));
+    frame.render_widget(
+        paragraph.scroll((app.inspector_scroll, 0)).block(block),
+        area,
+    );
+}
+
+/// `{code:>4}  {value}`: the code muted, a numeric value in `number`.
+fn pair_line(theme: &Theme, code: i16, value: &str) -> Line<'static> {
+    let style = match value_kind(code) {
+        ValueKind::Float | ValueKind::Integer => theme.fg(theme.number),
+        ValueKind::Text => Style::default(),
+    };
+    Line::from(vec![
+        Span::styled(format!("{code:>4}  "), theme.muted()),
+        Span::styled(printable(value), style),
+    ])
+}
+
+/// A hex dump line with the offset muted and the ASCII column in `number`.
+fn hex_line(theme: &Theme, line: &str) -> Line<'static> {
+    let parts = line.split_once("  ").and_then(|(offset, rest)| {
+        let (bytes, ascii) = rest.split_at_checked(rest.find('|')?)?;
+        Some((offset, bytes, ascii))
+    });
+    let Some((offset, bytes, ascii)) = parts else {
+        return Line::raw(line.to_owned());
+    };
+    Line::from(vec![
+        Span::styled(offset.to_owned(), theme.muted()),
+        Span::raw(format!("  {bytes}")),
+        Span::styled(ascii.to_owned(), theme.fg(theme.number)),
+    ])
+}
+
+fn view_title(view: View) -> &'static str {
+    match view {
+        View::Pairs => "DXF",
+        View::Hex => "Hex",
+    }
+}
+
+/// The view's name, and the record's byte range right-aligned when there is a record.
+fn source_block(app: &App) -> Block<'static> {
+    let theme = &app.theme;
+    let block = pane(theme, view_title(app.view), app.focus == Pane::Source)
+        .padding(Padding::horizontal(SOURCE_PADDING));
+    if app.source.pairs.is_empty() {
+        return block;
+    }
+    let bytes = &app.source.bytes;
+    block.title(
+        Line::styled(
+            format!(" 0x{:x}..0x{:x} ", bytes.start, bytes.end),
+            theme.muted(),
+        )
+        .right_aligned(),
+    )
+}
+
+/// The lines from the scroll offset on, and past the last one the count of bytes the pane does not lay out.
+fn source_lines(app: &App, height: usize) -> Vec<Line<'static>> {
+    let theme = &app.theme;
+    let source = &app.source;
+    if source.pairs.is_empty() {
+        return vec![Line::styled("no source record", theme.muted())];
+    }
+    let scroll = app.source_scroll;
+    let mut lines: Vec<Line<'static>> = match app.view {
+        View::Pairs => source
+            .pairs
+            .iter()
+            .skip(scroll)
+            .take(height)
+            .map(|(code, value)| pair_line(theme, *code, value))
+            .collect(),
+        View::Hex => source
+            .hex
+            .iter()
+            .skip(scroll)
+            .take(height)
+            .map(|line| hex_line(theme, line))
+            .collect(),
+    };
+    let room_after_end = scroll.saturating_add(height) > source.line_count(app.view);
+    if source.more == 0 || !room_after_end {
+        return lines;
+    }
+    lines.push(Line::styled(
+        format!("{} more bytes: cadboss obj shows them", source.more),
+        theme.muted(),
+    ));
+    lines
+}
+
+fn draw_source(app: &mut App, frame: &mut Frame, area: Rect) {
+    let count = app.source.line_count(app.view);
+    app.source_scroll = app.source_scroll.min(count.saturating_sub(1));
+    let height = usize::from(area.height.saturating_sub(2));
+    frame.render_widget(
+        Paragraph::new(source_lines(app, height)).block(source_block(app)),
+        area,
+    );
+    scrollbar(&app.theme, frame, area, count, app.source_scroll);
+}
+
+fn hint(theme: &Theme, key: &str, label: &str) -> [Span<'static>; 2] {
+    [
+        Span::styled(key.to_owned(), theme.key()),
+        Span::styled(format!(" {label}   "), theme.muted()),
+    ]
+}
+
+fn mode(app: &App) -> &'static str {
+    if app.help {
+        return "keys";
+    }
+    if app.search.editing {
+        return "search";
+    }
+    if app.yanking {
+        return "copy";
+    }
+    "browse"
+}
+
+fn matches_label(count: usize) -> String {
+    if count == 1 {
+        return "1 match".to_owned();
+    }
+    format!("{count} matches")
+}
+
+/// The status bar in parts: the chip and the prompt, the hints dropped from the end when short of room, and the right part.
+struct Status {
+    left: Vec<Span<'static>>,
+    hints: Vec<[Span<'static>; 2]>,
+    right: Vec<Span<'static>>,
+}
+
+impl Status {
+    /// The left part with the first `count` hints.
+    fn left_with(&self, count: usize) -> Line<'static> {
+        let hints = self.hints.iter().take(count).flatten();
+        Line::from(self.left.iter().chain(hints).cloned().collect::<Vec<_>>())
+    }
+}
+
+fn search_status(app: &App) -> Status {
+    let theme = &app.theme;
+    let left = vec![
+        Span::styled("/", theme.key()),
+        Span::raw(printable(&app.search.query)),
+        Span::styled("█", theme.fg(theme.accent)),
+    ];
+    let mut right = vec![Span::styled(
+        format!("{}   ", matches_label(app.search.hits.len())),
+        theme.muted(),
+    )];
+    right.extend(hint(theme, "enter", "go"));
+    right.extend(hint(theme, "esc", "cancel"));
+    Status {
+        left,
+        hints: Vec::new(),
+        right,
+    }
+}
+
+fn toast_span(theme: &Theme, toast: &Toast) -> Span<'static> {
+    if toast.problem {
+        return Span::styled(
+            format!("{} ", toast.text),
+            theme.fg(theme.error).add_modifier(Modifier::BOLD),
+        );
+    }
+    Span::styled(
+        format!("✓ {} ", toast.text),
+        theme.fg(theme.ok).add_modifier(Modifier::BOLD),
+    )
+}
+
+/// The position among the search hits, or their count before `n` or enter goes to one.
+fn hit_position(app: &App) -> String {
+    let count = app.search.hits.len();
+    let Some(current) = app.search.current else {
+        return matches_label(count);
+    };
+    format!("match {} of {count}", current.saturating_add(1))
+}
+
+/// The toast while one is up, else the position among the search hits.
+fn browse_right(app: &App) -> Vec<Span<'static>> {
+    let theme = &app.theme;
+    if let Some(toast) = &app.toast {
+        return vec![toast_span(theme, toast)];
+    }
+    if app.search.hits.is_empty() {
+        return Vec::new();
+    }
+    let mut spans = vec![Span::styled(
+        format!("{}   ", hit_position(app)),
+        theme.muted(),
+    )];
+    spans.extend(hint(theme, "n", "next"));
+    spans
+}
+
+fn mode_status(app: &App) -> Status {
+    let theme = &app.theme;
+    if app.search.editing {
+        return search_status(app);
+    }
+    if app.yanking {
+        return Status {
+            left: Vec::new(),
+            hints: vec![
+                hint(theme, "key", "copies that line"),
+                hint(theme, "esc", "cancel"),
+            ],
+            right: Vec::new(),
+        };
+    }
+    Status {
+        left: Vec::new(),
+        hints: HINTS
+            .iter()
+            .map(|(key, label)| hint(theme, key, label))
+            .collect(),
+        right: browse_right(app),
+    }
+}
+
+fn status(app: &App) -> Status {
+    let theme = &app.theme;
+    let mut status = mode_status(app);
+    let chip = [
+        Span::styled(format!(" {} ", mode(app)), theme.chip(theme.accent)),
+        Span::raw("  "),
+    ];
+    status.left.splice(0..0, chip);
+    status
+}
+
+/// The status bar as plain text with every hint, the left part then the right part.
+pub fn status_text(app: &App) -> String {
+    let status = status(app);
+    let left = status.left_with(status.hints.len());
+    left.spans
+        .iter()
+        .chain(&status.right)
+        .map(|span| span.content.as_ref())
+        .collect::<String>()
+        .trim_end()
+        .to_owned()
+}
+
+fn draw_status(app: &App, frame: &mut Frame, area: Rect) {
+    let status = status(app);
+    let right = Line::from(status.right.clone());
+    let room = usize::from(area.width).saturating_sub(right.width() + BAR_GAP);
+    let candidates = (0..=status.hints.len())
+        .rev()
+        .map(|count| status.left_with(count))
+        .collect();
+    spread(frame, area, first_fitting(candidates, room), right);
+}
+
+/// A centered rectangle of the given size, shrunk to fit `area`.
+fn popup(area: Rect, (width, height): (u16, u16)) -> Rect {
+    let [row] = Layout::vertical([Constraint::Length(height.min(area.height))])
+        .flex(Flex::Center)
+        .areas(area);
+    let [cell] = Layout::horizontal([Constraint::Length(width.min(area.width))])
+        .flex(Flex::Center)
+        .areas(row);
+    cell
+}
+
+fn popup_block(theme: &Theme, title: &str, footer: &str) -> Block<'static> {
+    Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(theme.fg(theme.accent))
+        .title(Span::styled(
+            format!(" {title} "),
+            theme.bold().fg(theme.accent),
+        ))
+        .title_bottom(Line::styled(format!(" {footer} "), theme.muted()).right_aligned())
+        .padding(Padding::new(2, 2, 1, 0))
+}
+
+/// The target's key, its name and a one-line preview of what it copies, or `none here` in `border` when the row has none.
+fn yank_line(app: &App, target: YankTarget, width: usize) -> Line<'static> {
+    let theme = &app.theme;
+    let name = format!("{:<15}", target.name());
+    let text = yank_text(app, target);
+    if text.is_empty() {
+        let dim = theme.fg(theme.border);
+        return Line::from(vec![
+            Span::styled(format!("{}  ", target.key()), dim),
+            Span::styled(name, dim),
+            Span::styled("none here", dim),
+        ]);
+    }
+    let flat = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let preview = fit(
+        &printable(&flat),
+        width.saturating_sub(name.chars().count() + 3),
+    );
+    Line::from(vec![
+        Span::styled(format!("{}  ", target.key()), theme.key()),
+        Span::raw(name),
+        Span::styled(preview, theme.muted()),
+    ])
+}
+
+fn draw_yank(app: &App, frame: &mut Frame) {
+    let area = popup(frame.area(), COPY_POPUP);
+    let width = usize::from(area.width.saturating_sub(6));
+    let lines: Vec<Line> = TARGETS
+        .iter()
+        .map(|target| yank_line(app, *target, width))
+        .collect();
+    frame.render_widget(Clear, area);
+    frame.render_widget(
+        Paragraph::new(lines).block(popup_block(&app.theme, "Copy", "esc closes")),
+        area,
+    );
+}
+
+fn draw_help(app: &App, frame: &mut Frame) {
+    let theme = &app.theme;
+    let lines: Vec<Line> = KEYS
+        .iter()
+        .map(|(key, what)| {
+            Line::from(vec![
+                Span::styled(format!("{key:<14}"), theme.key()),
+                Span::raw(*what),
+            ])
+        })
+        .collect();
+    let area = popup(frame.area(), KEYS_POPUP);
+    frame.render_widget(Clear, area);
+    frame.render_widget(
+        Paragraph::new(lines).block(popup_block(theme, "Keys", "any key closes")),
+        area,
+    );
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+    use std::sync::Arc;
+
+    use cadboss_core::{SkipKind, SkipReason};
+    use cadboss_dxf::DxfDocument;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    use super::*;
+    use crate::app::Msg;
+    use crate::outline::{Outline, ROOT};
+
+    fn demo() -> App {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/demo.dxf");
+        let doc = Arc::new(DxfDocument::open(Path::new(path)).unwrap());
+        let mut app = App::new(
+            Arc::clone(&doc),
+            "demo.dxf".to_owned(),
+            "assets/demo.dxf".to_owned(),
+            (80, 24),
+        );
+        app.update(Msg::Loaded(Box::new(Outline::build(&doc, "demo.dxf"))));
+        app
+    }
+
+    fn row(app: &App, path: &[&str]) -> usize {
+        path.iter().fold(ROOT, |row, label| {
+            *app.outline.rows[row]
+                .children
+                .iter()
+                .find(|child| app.outline.rows[**child].label == *label)
+                .unwrap()
+        })
+    }
+
+    fn span<'l>(line: &'l Line<'static>, text: &str) -> &'l Span<'static> {
+        line.spans.iter().find(|span| span.content == text).unwrap()
+    }
+
+    #[test]
+    fn fit_cuts_with_an_ellipsis() {
+        assert_eq!(fit("TITLEBLOCK", 20), "TITLEBLOCK");
+        assert_eq!(fit("TITLEBLOCK", 10), "TITLEBLOCK");
+        assert_eq!(fit("TITLEBLOCK", 6), "TITLE…");
+    }
+
+    #[test]
+    fn marked_finds_every_occurrence_ignoring_case() {
+        let mark = Style::default().add_modifier(Modifier::BOLD);
+        let spans = marked("P-101 and p-102", "P-10", Style::default(), mark);
+        let parts: Vec<&str> = spans.iter().map(|span| span.content.as_ref()).collect();
+        assert_eq!(parts, ["", "P-10", "1 and ", "p-10", "2"]);
+        assert_eq!(spans[1].style, mark);
+        assert_eq!(spans[2].style, Style::default());
+        assert_eq!(marked("WALLS", " ", Style::default(), mark).len(), 1);
+    }
+
+    #[test]
+    fn printable_shows_control_characters_as_dots() {
+        assert_eq!(printable("A\u{1b}[2J\tB"), "A.[2J.B");
+        assert_eq!(printable("§ 4"), "§ 4");
+    }
+
+    #[test]
+    fn tree_rows_color_type_groups_entity_types_and_layer_flags() {
+        let mut app = demo();
+        let theme = app.theme;
+        let dimension = row(&app, &["Layouts", "Model", "DIMENSION"]);
+        app.select(dimension);
+        let line = tree_line(&app, dimension, 40).unwrap();
+        assert_eq!(span(&line, "DIMENSION").style.fg, Some(theme.info));
+        assert_eq!(span(&line, "▸ ").style.fg, Some(theme.muted));
+        assert_eq!(span(&line, "3").style.fg, Some(theme.muted));
+        assert!(line.to_string().starts_with("▌ "));
+        assert_eq!(line.width(), 40);
+
+        let insert = row(&app, &["Layouts", "Model", "INSERT"]);
+        app.select(insert);
+        app.update(Msg::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)));
+        let entity = app.outline.rows[insert].children[0];
+        let line = tree_line(&app, entity, 40).unwrap();
+        assert_eq!(span(&line, "INSERT").style.fg, Some(theme.info));
+        assert_eq!(span(&line, "  EQUIPMENT  PUMP").style.fg, None);
+        assert_eq!(span(&line, "136").style.fg, Some(theme.muted));
+
+        let spans = detail_spans(
+            &theme,
+            &RowKind::Layer(1),
+            "2 entities · frozen · off",
+            Style::default(),
+        );
+        assert_eq!(spans[0].content, "2 entities");
+        assert_eq!(spans[0].style.fg, Some(theme.muted));
+        assert_eq!(spans[1].content, " · frozen · off");
+        assert_eq!(spans[1].style.fg, Some(theme.warning));
+        let plain = detail_spans(&theme, &RowKind::Layer(0), "11 entities", Style::default());
+        assert_eq!(plain.len(), 1);
+    }
+
+    #[test]
+    fn source_lines_color_codes_numbers_offsets_and_ascii() {
+        let theme = Theme::truecolor();
+        let pair = pair_line(&theme, 40, "2.5");
+        assert_eq!(pair.to_string(), "  40  2.5");
+        assert_eq!(pair.spans[0].style.fg, Some(theme.muted));
+        assert_eq!(pair.spans[1].style.fg, Some(theme.number));
+        let text = pair_line(&theme, 8, "WALLS\u{7}");
+        assert_eq!(text.spans[1].content, "WALLS.");
+        assert_eq!(text.spans[1].style.fg, None);
+
+        let dump = "000016ee  20 20 30 0a 49 4e 53 45  52 54 0a 20 20 35 0a 31  |  0.INSERT.  5.1|";
+        let line = hex_line(&theme, dump);
+        assert_eq!(line.to_string(), dump);
+        assert_eq!(line.spans[0].content, "000016ee");
+        assert_eq!(line.spans[0].style.fg, Some(theme.muted));
+        assert_eq!(line.spans[2].content, "|  0.INSERT.  5.1|");
+        assert_eq!(line.spans[2].style.fg, Some(theme.number));
+        assert_eq!(hex_line(&theme, "odd").to_string(), "odd");
+    }
+
+    #[test]
+    fn header_leaves_out_the_units_then_the_counts_when_short_of_room() {
+        let mut app = demo();
+        let wide = header_left(&app, 200).to_string();
+        assert_eq!(
+            wide,
+            " cadboss   demo.dxf   DXF AC1032   Millimeters   15 entities in 3 layouts"
+        );
+        assert_eq!(
+            header_left(&app, 64).to_string(),
+            " cadboss   demo.dxf   DXF AC1032   15 entities in 3 layouts"
+        );
+        assert_eq!(
+            header_left(&app, 40).to_string(),
+            " cadboss   demo.dxf   DXF AC1032"
+        );
+        assert_eq!(header_right(&app).to_string(), "35 text items ");
+
+        app.outline
+            .document
+            .report
+            .note(SkipKind::Entity, SkipReason::Malformed);
+        let right = header_right(&app);
+        assert_eq!(right.to_string(), "35 text items   ! 1 skipped ");
+        assert_eq!(right.spans[1].style.fg, Some(app.theme.warning));
+
+        app.loading = true;
+        app.ticks = 11;
+        assert_eq!(header_right(&app).to_string(), "⠙ reading the drawing ");
+        assert_eq!(
+            header_left(&app, 200).to_string(),
+            " cadboss   demo.dxf   DXF AC1032   Millimeters"
+        );
+
+        app.loading = false;
+        let metadata = &mut app.outline.document.metadata;
+        metadata.entity_counts = vec![("LINE".to_owned(), 1)];
+        metadata.layout_count = 1;
+        assert_eq!(
+            header_left(&app, 200).to_string(),
+            " cadboss   demo.dxf   DXF AC1032   Millimeters   1 entity in 1 layout"
+        );
+    }
+}

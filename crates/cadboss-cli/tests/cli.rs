@@ -294,3 +294,20 @@ fn an_unknown_layout_exits_2_and_lists_the_layouts() -> TestResult {
     }
     Ok(())
 }
+
+#[test]
+fn tui_refuses_a_pipe() -> TestResult {
+    let output = cadboss(&["tui", &fixture("simple.dxf")])?;
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stderr(&output).contains("cadboss tui requires an interactive terminal"));
+    assert!(stdout(&output).is_empty());
+    Ok(())
+}
+
+#[test]
+fn tui_reports_a_missing_file_before_the_terminal() -> TestResult {
+    let output = cadboss(&["tui", "/nonexistent/plan.dxf"])?;
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stderr(&output).contains("/nonexistent/plan.dxf"));
+    Ok(())
+}

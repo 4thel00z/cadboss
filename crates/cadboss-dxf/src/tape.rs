@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use cadboss_core::{Budget, Error, Report, Result};
 
-use crate::binary::{lex_binary, SENTINEL};
+use crate::binary::{is_chunk, lex_binary, value_kind, ValueKind, SENTINEL};
 use crate::lexer::lex_ascii;
 
 /// One group-code/value pair: the value bytes live in the input at `offset..offset + len`.
@@ -57,7 +57,7 @@ pub struct Tape {
     pub(crate) tokens: Vec<Token>,
     pub(crate) long_values: Vec<(u32, u64, u32)>,
     pub(crate) sections: Vec<Section>,
-    pub(crate) binary: bool,
+    pub(crate) code_width: u8,
 }
 
 impl Tape {
@@ -81,7 +81,7 @@ impl Tape {
     }
 
     pub fn is_binary(&self) -> bool {
-        self.binary
+        self.code_width != 0
     }
 
     /// Group code at `index`, or `i16::MIN` when out of range.
@@ -91,31 +91,66 @@ impl Tape {
             .map_or(i16::MIN, |token| token.code)
     }
 
-    /// Value bytes at `index`, or an empty slice when out of range.
-    pub fn value<'a>(&'a self, index: u32, bytes: &'a [u8]) -> &'a [u8] {
-        let Some(token) = self.tokens.get(index as usize) else {
-            return &[];
-        };
+    fn span(&self, index: u32) -> Option<(usize, usize)> {
+        let token = self.tokens.get(index as usize)?;
         let (offset, len) = match token.len {
-            u16::MAX => match self
-                .long_values
-                .binary_search_by_key(&index, |entry| entry.0)
-            {
-                Ok(at) => match self.long_values.get(at) {
-                    Some(&(_, offset, len)) => (offset, u64::from(len)),
-                    None => return &[],
-                },
-                Err(_) => return &[],
-            },
+            u16::MAX => {
+                let at = self
+                    .long_values
+                    .binary_search_by_key(&index, |entry| entry.0)
+                    .ok()?;
+                let &(_, offset, len) = self.long_values.get(at)?;
+                (offset, u64::from(len))
+            }
             len => (u64::from(token.offset), u64::from(len)),
         };
-        let (Ok(start), Ok(end)) = (
-            usize::try_from(offset),
-            usize::try_from(offset.saturating_add(len)),
-        ) else {
+        let start = usize::try_from(offset).ok()?;
+        let end = usize::try_from(offset.saturating_add(len)).ok()?;
+        Some((start, end - start))
+    }
+
+    /// Value bytes at `index`, or an empty slice when out of range.
+    pub fn value<'a>(&'a self, index: u32, bytes: &'a [u8]) -> &'a [u8] {
+        let Some((start, len)) = self.span(index) else {
             return &[];
         };
-        bytes.get(start..end).unwrap_or(&[])
+        bytes.get(start..start.saturating_add(len)).unwrap_or(&[])
+    }
+
+    /// Byte offset where the record at `index` begins, code bytes included; `bytes.len()` when out of range.
+    pub fn token_start(&self, index: u32, bytes: &[u8]) -> usize {
+        let (Some(token), Some((offset, _))) = (self.tokens.get(index as usize), self.span(index))
+        else {
+            return bytes.len();
+        };
+        if self.is_binary() {
+            let code_bytes = match (self.code_width, token.code) {
+                (2, _) => 2,
+                (_, code) if !(0..=254).contains(&code) => 3,
+                _ => 1,
+            };
+            return offset
+                .saturating_sub(code_bytes)
+                .saturating_sub(usize::from(is_chunk(token.code)));
+        }
+        let before = bytes.get(..offset).unwrap_or(bytes);
+        let value_line = memchr::memrchr(b'\n', before).map_or(0, |at| at + 1);
+        let Some(code_end) = value_line.checked_sub(1) else {
+            return 0;
+        };
+        memchr::memrchr(b'\n', &bytes[..code_end]).map_or(0, |at| at + 1)
+    }
+
+    /// Byte range covering the records in `tokens`, from the first code byte to the start of the next record.
+    pub fn byte_range(&self, tokens: Range<u32>, bytes: &[u8]) -> Range<usize> {
+        let start = self.token_start(tokens.start, bytes);
+        if tokens.end <= tokens.start {
+            return start..start;
+        }
+        if tokens.end >= self.len() {
+            return start..bytes.len();
+        }
+        start..self.token_start(tokens.end, bytes)
     }
 
     pub fn section(&self, name: SectionName) -> Option<&Section> {
@@ -128,7 +163,7 @@ impl Tape {
     }
 
     fn float(&self, value: &[u8]) -> Option<f64> {
-        if self.binary {
+        if self.is_binary() {
             return Some(f64::from_le_bytes(value.try_into().ok()?));
         }
         std::str::from_utf8(value).ok()?.trim().parse().ok()
@@ -136,7 +171,7 @@ impl Tape {
 
     /// Decodes an integer value by width (1, 2, 4 or 8 bytes) when the tape is binary, text otherwise.
     pub(crate) fn i64(&self, value: &[u8]) -> Option<i64> {
-        if self.binary {
+        if self.is_binary() {
             return match *value {
                 [byte] => Some(i64::from(byte)),
                 [a, b] => Some(i64::from(i16::from_le_bytes([a, b]))),
@@ -146,6 +181,16 @@ impl Tape {
             };
         }
         std::str::from_utf8(value).ok()?.trim().parse().ok()
+    }
+
+    /// A value as text: a binary float or integer as its number, anything else as lossy UTF-8 of its bytes.
+    pub fn display_value(&self, code: i16, value: &[u8]) -> String {
+        let typed = match (self.is_binary(), value_kind(code)) {
+            (false, _) | (_, ValueKind::Text) => None,
+            (true, ValueKind::Float) => self.f64(value).map(|number| number.to_string()),
+            (true, ValueKind::Integer) => self.i64(value).map(|number| number.to_string()),
+        };
+        typed.unwrap_or_else(|| String::from_utf8_lossy(value).into_owned())
     }
 
     pub fn pairs(&self, range: Range<u32>) -> impl Iterator<Item = (u32, i16)> + '_ {
@@ -247,5 +292,93 @@ impl<'t> Iterator for Cursor<'t> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.advance()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn byte_range_spans_the_code_lines_of_an_ascii_record() {
+        let bytes =
+            b"  0\nSECTION\n  2\nENTITIES\n  0\nLINE\n  8\n0\n 10\n1.5\n  0\nENDSEC\n  0\nEOF\n";
+        let (tape, _) = Tape::lex(bytes, &Budget::default()).unwrap();
+        assert_eq!(tape.byte_range(2..5, bytes), 25..48);
+        assert_eq!(
+            &bytes[tape.byte_range(2..5, bytes)],
+            b"  0\nLINE\n  8\n0\n 10\n1.5\n"
+        );
+        assert_eq!(tape.byte_range(5..tape.len(), bytes).end, bytes.len());
+        assert_eq!(tape.token_start(0, bytes), 0);
+    }
+
+    #[test]
+    fn byte_range_keeps_carriage_returns() {
+        let bytes = b"  0\r\nSECTION\r\n  2\r\nENTITIES\r\n  0\r\nLINE\r\n  8\r\n0\r\n  0\r\nENDSEC\r\n  0\r\nEOF\r\n";
+        let (tape, _) = Tape::lex(bytes, &Budget::default()).unwrap();
+        assert_eq!(
+            &bytes[tape.byte_range(2..4, bytes)],
+            b"  0\r\nLINE\r\n  8\r\n0\r\n"
+        );
+    }
+
+    #[test]
+    fn byte_range_starts_at_the_code_bytes_of_a_binary_record() {
+        let bytes = cadboss_testkit::dxf::DxfBuilder::new()
+            .line((0.0, 0.0), (1.0, 1.0))
+            .binary()
+            .build();
+        let (tape, _) = Tape::lex(&bytes, &Budget::default()).unwrap();
+        assert!(tape.is_binary());
+        let start = (0..tape.len())
+            .find(|index| tape.code(*index) == 0 && tape.value(*index, &bytes) == b"LINE")
+            .unwrap();
+        let end = (start + 1..tape.len())
+            .find(|index| tape.code(*index) == 0)
+            .unwrap();
+        let slice = &bytes[tape.byte_range(start..end, &bytes)];
+        assert!(matches!(
+            slice.windows(5).position(|w| w == b"LINE\0"),
+            Some(1 | 2)
+        ));
+        assert_eq!(
+            tape.byte_range(start..end, &bytes).end,
+            tape.token_start(end, &bytes)
+        );
+    }
+
+    #[test]
+    fn display_value_prints_binary_numbers_and_ascii_values_as_written() {
+        let ascii =
+            b"  0\nSECTION\n  2\nENTITIES\n  0\nLINE\n 10\n1.50\n 62\n  7\n  0\nENDSEC\n  0\nEOF\n";
+        let (tape, _) = Tape::lex(ascii, &Budget::default()).unwrap();
+        let shown: Vec<String> = (0..tape.len())
+            .map(|index| tape.display_value(tape.code(index), tape.value(index, ascii)))
+            .collect();
+        assert!(shown.contains(&"1.50".to_owned()));
+        assert!(shown.contains(&"LINE".to_owned()));
+
+        let bytes = cadboss_testkit::dxf::DxfBuilder::new()
+            .line((0.0, 0.5), (12.25, 3.0))
+            .binary()
+            .build();
+        let (tape, _) = Tape::lex(&bytes, &Budget::default()).unwrap();
+        let shown: Vec<(i16, String)> = (0..tape.len())
+            .map(|index| {
+                let code = tape.code(index);
+                (code, tape.display_value(code, tape.value(index, &bytes)))
+            })
+            .collect();
+        assert!(shown.contains(&(0, "LINE".to_owned())));
+        assert!(shown.contains(&(20, "0.5".to_owned())));
+        assert!(shown.contains(&(11, "12.25".to_owned())));
+        let integers: Vec<&String> = shown
+            .iter()
+            .filter(|(code, _)| matches!(value_kind(*code), ValueKind::Integer))
+            .map(|(_, text)| text)
+            .collect();
+        assert!(!integers.is_empty());
+        assert!(integers.iter().all(|text| text.parse::<i64>().is_ok()));
     }
 }

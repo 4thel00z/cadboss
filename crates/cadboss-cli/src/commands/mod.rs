@@ -7,3 +7,4 @@ pub mod obj;
 pub mod q;
 pub mod skill;
 pub mod text;
+pub mod tui;

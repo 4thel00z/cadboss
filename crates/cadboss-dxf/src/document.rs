@@ -284,6 +284,11 @@ impl DxfDocument {
         &self.header
     }
 
+    /// The codepage text values are decoded with, from the header's version and `$DWGCODEPAGE`.
+    pub fn codepage(&self) -> Codepage {
+        self.cp
+    }
+
     pub fn layers(&self) -> &[Layer] {
         &self.layers
     }
@@ -299,6 +304,11 @@ impl DxfDocument {
     /// Case-insensitive position of the block named `name` among `blocks()`.
     pub fn block_index(&self, name: &str) -> Option<usize> {
         self.block_lookup.get(&name.to_ascii_lowercase()).copied()
+    }
+
+    /// Case-insensitive definition of the block named `name`.
+    pub fn block_def(&self, name: &str) -> Option<&BlockDef> {
+        self.blocks.get(self.block_index(name)?)
     }
 
     fn decoder<'a>(&'a self, range: Range<u32>, layout_of: &'a LayoutOf) -> EntityDecoder<'a> {
@@ -341,8 +351,8 @@ impl DxfDocument {
         (buckets, notes)
     }
 
-    /// Block whose body holds the entities of the layout at `position`: the block of a paper layout when that body is not empty.
-    pub(crate) fn body_block(&self, position: usize) -> Option<usize> {
+    /// Position in `blocks()` of the block whose non-empty body holds the entities of the paper layout at `position` in `layouts()`.
+    pub fn body_block(&self, position: usize) -> Option<usize> {
         let layout = self.layouts.get(position)?;
         if layout.kind != LayoutKind::Paper {
             return None;

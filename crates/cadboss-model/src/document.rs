@@ -29,6 +29,7 @@ pub struct TextItem {
     pub layout: Text,
     pub position: Option<Point>,
     pub height: Option<f64>,
+    pub handle: Option<u64>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
@@ -89,7 +90,18 @@ mod tests {
             layers: vec![],
             blocks: vec![],
             layouts: vec![],
-            text: TextGroups::default(),
+            text: TextGroups {
+                annotations: vec![TextItem {
+                    text: "a".into(),
+                    source: TextSource::Annotation,
+                    layer: "0".into(),
+                    layout: "Model".into(),
+                    position: None,
+                    height: None,
+                    handle: Some(7),
+                }],
+                ..TextGroups::default()
+            },
             report: Report::default(),
         };
         let value = serde_json::to_value(&document).unwrap();
@@ -103,6 +115,16 @@ mod tests {
             keys,
             ["metadata", "layers", "blocks", "layouts", "text", "report"]
         );
+        let item_keys: Vec<&str> = value["text"]["annotations"][0]
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        assert_eq!(
+            item_keys,
+            ["text", "source", "layer", "layout", "position", "height", "handle"]
+        );
     }
 
     #[test]
@@ -114,6 +136,7 @@ mod tests {
             layout: "Model".into(),
             position: None,
             height: None,
+            handle: None,
         };
         let groups = TextGroups {
             title_block: vec![item("a")],

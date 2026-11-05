@@ -3,7 +3,7 @@ use std::ops::Range;
 use std::path::PathBuf;
 
 use cadboss_core::Report;
-use cadboss_dxf::{value_kind, Cursor, DxfDocument, SectionName, ValueKind};
+use cadboss_dxf::{Cursor, DxfDocument, SectionName};
 use clap::Args;
 
 use crate::failure::Failure;
@@ -47,29 +47,18 @@ fn locate(doc: &DxfDocument, handle: u64) -> Option<Range<u32>> {
     })
 }
 
-fn display(cursor: &Cursor<'_>, binary: bool, code: i16, value: &[u8]) -> String {
-    let typed = match (binary, value_kind(code)) {
-        (false, _) | (_, ValueKind::Text) => None,
-        (true, ValueKind::Float) => cursor.f64(value).map(|number| number.to_string()),
-        (true, ValueKind::Integer) => cursor.i64(value).map(|number| number.to_string()),
-    };
-    typed.unwrap_or_else(|| String::from_utf8_lossy(value).into_owned())
-}
-
 pub fn run(args: &ObjArgs, doc: &DxfDocument, out: &mut dyn Write) -> Result<Report, Failure> {
     let digits = args.handle.trim_start_matches("0x");
     let handle = u64::from_str_radix(digits, 16)
         .map_err(|_| Failure::usage(format!("invalid handle {}: expected hex", args.handle)))?;
     let range = locate(doc, handle).ok_or_else(|| Failure::input("handle not found"))?;
     let mut record = Cursor::new(doc.tape(), doc.bytes(), range);
-    let reader = Cursor::new(doc.tape(), doc.bytes(), 0..0);
-    let binary = doc.tape().is_binary();
     let head = record.next();
     for (code, value) in head
         .into_iter()
         .chain(record.take_while(|(code, _)| *code != 0))
     {
-        writeln!(out, "{code}\t{}", display(&reader, binary, code, value))?;
+        writeln!(out, "{code}\t{}", doc.tape().display_value(code, value))?;
     }
     Ok(doc.report().clone())
 }
