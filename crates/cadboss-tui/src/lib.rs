@@ -4,6 +4,7 @@
 pub mod app;
 pub mod clipboard;
 pub mod input;
+mod inspector;
 pub mod outline;
 pub mod source;
 pub mod theme;

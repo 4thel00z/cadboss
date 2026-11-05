@@ -2,10 +2,8 @@
 
 use std::ops::RangeInclusive;
 
-use cadboss_core::{BBox, Point};
 use cadboss_dxf::{value_kind, ValueKind};
-use cadboss_model::{format_number, Entity, EntityKind, Metadata, TextItem, TextSource};
-use cadboss_output::one_line;
+use cadboss_model::Metadata;
 use ratatui::layout::{Alignment, Constraint, Flex, Layout, Margin, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -16,7 +14,8 @@ use ratatui::widgets::{
 use ratatui::Frame;
 
 use crate::app::{App, Pane, Toast};
-use crate::outline::{hex, RowKind};
+use crate::inspector::{inspector_lines, inspector_title};
+use crate::outline::RowKind;
 use crate::source::View;
 use crate::theme::Theme;
 use crate::yank::{yank_text, YankTarget, TARGETS};
@@ -54,8 +53,8 @@ pub const RIGHT_TOP_SPLIT: RangeInclusive<u16> = 20..=85;
 pub const SPINNER: [char; 10] = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 /// The narrowest label a tree row keeps before it drops its detail column.
 const LABEL_ROOM: usize = 18;
-/// Blank columns kept between the header's left and right parts.
-const HEADER_GAP: usize = 2;
+/// Blank columns kept between the left and right parts of the header and the status bar.
+const BAR_GAP: usize = 2;
 const COPY_POPUP: (u16, u16) = (76, 11);
 const KEYS_POPUP: (u16, u16) = (64, 15);
 const HINTS: [(&str, &str); 6] = [
@@ -134,7 +133,7 @@ fn fit(text: &str, width: usize) -> String {
 }
 
 /// `text` with control characters shown as `.`, so bytes from the file never reach the terminal as escapes.
-fn printable(text: &str) -> String {
+pub(crate) fn printable(text: &str) -> String {
     text.chars().map(visible).collect()
 }
 
@@ -160,7 +159,7 @@ fn pane_styles(theme: &Theme, focused: bool) -> (Style, Style) {
     (theme.fg(theme.border), theme.bold().fg(Color::Reset))
 }
 
-fn entity_total(metadata: &Metadata) -> u64 {
+pub(crate) fn entity_total(metadata: &Metadata) -> u64 {
     metadata
         .entity_counts
         .iter()
@@ -202,13 +201,23 @@ fn header_left(app: &App, room: usize) -> Line<'static> {
         )
     });
     let optional: Vec<Span<'static>> = std::iter::once(units).chain(counts).collect();
-    (0..=optional.len())
+    let candidates = (0..=optional.len())
         .map(|dropped| {
-            let kept = optional.iter().skip(dropped).cloned();
-            Line::from(head.iter().cloned().chain(kept).collect::<Vec<_>>())
+            let kept = optional.iter().skip(dropped);
+            Line::from(head.iter().chain(kept).cloned().collect::<Vec<_>>())
         })
-        .find(|line| line.width() <= room)
-        .unwrap_or_else(|| Line::from(head.to_vec()))
+        .collect();
+    first_fitting(candidates, room)
+}
+
+/// The first candidate no wider than `room`, else the last one; candidates run from fullest to barest.
+fn first_fitting(candidates: Vec<Line<'static>>, room: usize) -> Line<'static> {
+    let last = candidates.len().saturating_sub(1);
+    let index = candidates
+        .iter()
+        .position(|line| line.width() <= room)
+        .unwrap_or(last);
+    candidates.into_iter().nth(index).unwrap_or_default()
 }
 
 /// The spinner while loading, then the text item count and the skipped count when the report has notes.
@@ -255,7 +264,7 @@ fn spread(frame: &mut Frame, area: Rect, left: Line<'static>, right: Line<'stati
 
 fn draw_header(app: &App, frame: &mut Frame, area: Rect) {
     let right = header_right(app);
-    let room = usize::from(area.width).saturating_sub(right.width() + HEADER_GAP);
+    let room = usize::from(area.width).saturating_sub(right.width() + BAR_GAP);
     spread(frame, area, header_left(app, room), right);
 }
 
@@ -442,7 +451,7 @@ fn scrollbar(theme: &Theme, frame: &mut Frame, area: Rect, length: usize, positi
         horizontal: 0,
     });
     let visible = usize::from(inner.height);
-    if length <= visible {
+    if inner.width == 0 || length <= visible {
         return;
     }
     let mut state = ScrollbarState::new(length.saturating_sub(visible)).position(position);
@@ -474,540 +483,6 @@ fn draw_tree(app: &App, frame: &mut Frame, area: Rect) {
         .collect();
     frame.render_widget(Paragraph::new(lines).block(block), area);
     scrollbar(&app.theme, frame, area, rows.len(), offset);
-}
-
-/// A section heading: the bold muted title, then a rule to the edge.
-fn section(theme: &Theme, title: &str, width: usize) -> Line<'static> {
-    let rule = "─".repeat(width.saturating_sub(title.chars().count() + 1));
-    Line::from(vec![
-        Span::styled(
-            format!("{title} "),
-            theme.muted().add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(rule, theme.fg(theme.border)),
-    ])
-}
-
-/// A blank line, the heading and the body; nothing when the body is empty.
-fn titled(
-    theme: &Theme,
-    title: &str,
-    width: usize,
-    body: Vec<Line<'static>>,
-) -> Vec<Line<'static>> {
-    if body.is_empty() {
-        return Vec::new();
-    }
-    [Line::raw(""), section(theme, title, width)]
-        .into_iter()
-        .chain(body)
-        .collect()
-}
-
-/// One fact: the key muted in an 11-column cell, then the value.
-fn fact(theme: &Theme, key: &str, value: Span<'static>) -> Line<'static> {
-    Line::from(vec![
-        Span::styled(format!("{key:<11}"), theme.muted()),
-        value,
-    ])
-}
-
-/// Facts with plain values, leaving out the ones whose value is empty.
-fn facts(theme: &Theme, entries: Vec<(&str, String)>) -> Vec<Line<'static>> {
-    entries
-        .into_iter()
-        .filter(|(_, value)| !value.is_empty())
-        .map(|(key, value)| fact(theme, key, Span::raw(printable(&value))))
-        .collect()
-}
-
-/// A layer flag: `yes` in `warning`, or `no`.
-fn flag(theme: &Theme, key: &str, set: bool) -> Line<'static> {
-    if !set {
-        return fact(theme, key, Span::raw("no"));
-    }
-    fact(theme, key, Span::styled("yes", theme.fg(theme.warning)))
-}
-
-fn yes_no(set: bool) -> String {
-    if set {
-        return "yes".to_owned();
-    }
-    "no".to_owned()
-}
-
-fn point(at: &Point) -> String {
-    format!("{}, {}", format_number(at.x), format_number(at.y))
-}
-
-fn extents(bbox: &BBox) -> String {
-    format!(
-        "({}, {}) to ({}, {})",
-        format_number(bbox.min.x),
-        format_number(bbox.min.y),
-        format_number(bbox.max.x),
-        format_number(bbox.max.y)
-    )
-}
-
-fn length(len: usize, noun: &str) -> String {
-    format!("{len} {noun}")
-}
-
-fn text_value(text: &cadboss_model::Text) -> String {
-    one_line(&text.to_string())
-}
-
-fn optional_text(text: Option<&cadboss_model::Text>) -> String {
-    text.map(text_value).unwrap_or_default()
-}
-
-fn optional_number(value: Option<f64>) -> String {
-    value.map(format_number).unwrap_or_default()
-}
-
-fn source_label(source: TextSource) -> &'static str {
-    match source {
-        TextSource::TitleBlock => "Title block",
-        TextSource::Annotation => "Annotation",
-        TextSource::Dimension => "Dimension",
-        TextSource::Leader => "Leader",
-        TextSource::BlockName => "Block name",
-        TextSource::LayerName => "Layer name",
-        TextSource::Attribute => "Attribute",
-        TextSource::Xref => "Xref",
-        TextSource::ImagePath => "Image path",
-        TextSource::Hyperlink => "Hyperlink",
-        TextSource::Property => "Property",
-    }
-}
-
-/// Metadata facts, then once loaded the counts, the entity types and the notes the report holds.
-fn file_lines(app: &App, width: usize) -> Vec<Line<'static>> {
-    let theme = &app.theme;
-    let document = &app.outline.document;
-    let metadata = &document.metadata;
-    let mut lines = facts(
-        theme,
-        vec![
-            (
-                "Format",
-                format!("{} {}", metadata.format.label(), metadata.version),
-            ),
-            ("Units", metadata.units.label()),
-            ("Codepage", optional_text(metadata.codepage.as_ref())),
-            ("Author", optional_text(metadata.author.as_ref())),
-            ("Created", optional_number(metadata.created)),
-            ("Updated", optional_number(metadata.updated)),
-            (
-                "Extents",
-                metadata.extents.as_ref().map(extents).unwrap_or_default(),
-            ),
-        ],
-    );
-    if app.loading {
-        return lines;
-    }
-    lines.extend(facts(
-        theme,
-        vec![
-            ("Layers", metadata.layer_count.to_string()),
-            ("Blocks", metadata.block_count.to_string()),
-            ("Layouts", metadata.layout_count.to_string()),
-            ("Entities", entity_total(metadata).to_string()),
-        ],
-    ));
-    let types = metadata
-        .entity_counts
-        .iter()
-        .map(|(name, count)| {
-            Line::from(vec![
-                Span::styled(format!("{:<12}", printable(name)), theme.fg(theme.info)),
-                Span::raw(count.to_string()),
-            ])
-        })
-        .collect();
-    lines.extend(titled(theme, "Entity types", width, types));
-    let notes: Vec<Line<'static>> = document
-        .report
-        .lines()
-        .into_iter()
-        .map(|note| Line::styled(note, theme.muted()))
-        .collect();
-    let heading = format!("Notes while reading ({})", notes.len());
-    lines.extend(titled(theme, &heading, width, notes));
-    lines
-}
-
-fn layout_lines(theme: &Theme, layout: &cadboss_model::Layout) -> Vec<Line<'static>> {
-    facts(
-        theme,
-        vec![
-            ("Kind", layout.kind.label().to_owned()),
-            ("Block", text_value(&layout.block_name)),
-            (
-                "Extents",
-                layout.extents.as_ref().map(extents).unwrap_or_default(),
-            ),
-            ("Entities", layout.entity_count.to_string()),
-        ],
-    )
-}
-
-fn block_lines(theme: &Theme, block: &cadboss_model::Block) -> Vec<Line<'static>> {
-    facts(
-        theme,
-        vec![
-            ("Base", point(&block.base)),
-            ("Xref", optional_text(block.xref_path.as_ref())),
-            ("Anonymous", yes_no(block.anonymous)),
-            ("Entities", block.entity_count.to_string()),
-        ],
-    )
-}
-
-fn blocks_folder_lines(theme: &Theme, blocks: &[cadboss_model::Block]) -> Vec<Line<'static>> {
-    let anonymous = blocks.iter().filter(|block| block.anonymous).count();
-    let xrefs = blocks
-        .iter()
-        .filter(|block| block.xref_path.is_some())
-        .count();
-    facts(
-        theme,
-        vec![
-            ("Blocks", blocks.len().to_string()),
-            ("Anonymous", anonymous.to_string()),
-            ("Xrefs", xrefs.to_string()),
-        ],
-    )
-}
-
-fn layer_lines(app: &App, layer: &cadboss_model::Layer) -> Vec<Line<'static>> {
-    let theme = &app.theme;
-    let count = app
-        .outline
-        .layer_counts
-        .get(layer.name.as_bytes())
-        .copied()
-        .unwrap_or(0);
-    vec![
-        fact(theme, "Color", Span::raw(layer.color.to_string())),
-        flag(theme, "Frozen", layer.frozen),
-        flag(theme, "Off", layer.off),
-        flag(theme, "Locked", layer.locked),
-        fact(theme, "Entities", Span::raw(count.to_string())),
-    ]
-}
-
-/// The kind's own fields: points as `x, y`, numbers through `format_number`, lists as their length.
-fn kind_facts(kind: &EntityKind) -> Vec<(&'static str, String)> {
-    match kind {
-        EntityKind::Line { start, end } => vec![("Start", point(start)), ("End", point(end))],
-        EntityKind::Circle { center, radius } => vec![
-            ("Center", point(center)),
-            ("Radius", format_number(*radius)),
-        ],
-        EntityKind::Arc {
-            center,
-            radius,
-            start,
-            end,
-        } => vec![
-            ("Center", point(center)),
-            ("Radius", format_number(*radius)),
-            ("Start", format_number(*start)),
-            ("End", format_number(*end)),
-        ],
-        EntityKind::Ellipse {
-            center,
-            major,
-            ratio,
-            start,
-            end,
-        } => vec![
-            ("Center", point(center)),
-            ("Major", point(major)),
-            ("Ratio", format_number(*ratio)),
-            ("Start", format_number(*start)),
-            ("End", format_number(*end)),
-        ],
-        EntityKind::Polyline { points, closed, .. } => vec![
-            ("Points", length(points.len(), "points")),
-            ("Closed", yes_no(*closed)),
-        ],
-        EntityKind::Spline {
-            control,
-            fit: fitted,
-            degree,
-            closed,
-        } => vec![
-            ("Control", length(control.len(), "points")),
-            ("Fit", length(fitted.len(), "points")),
-            ("Degree", degree.to_string()),
-            ("Closed", yes_no(*closed)),
-        ],
-        EntityKind::Hatch {
-            pattern,
-            solid,
-            loops,
-        } => vec![
-            ("Pattern", text_value(pattern)),
-            ("Solid", yes_no(*solid)),
-            ("Loops", loops.to_string()),
-        ],
-        EntityKind::Text {
-            text,
-            position,
-            height,
-            rotation,
-            style,
-        } => vec![
-            ("Text", text_value(text)),
-            ("Position", point(position)),
-            ("Height", format_number(*height)),
-            ("Rotation", format_number(*rotation)),
-            ("Style", text_value(style)),
-        ],
-        EntityKind::MText {
-            text,
-            position,
-            height,
-            width,
-            rotation,
-            style,
-        } => vec![
-            ("Text", text_value(text)),
-            ("Position", point(position)),
-            ("Height", format_number(*height)),
-            ("Width", format_number(*width)),
-            ("Rotation", format_number(*rotation)),
-            ("Style", text_value(style)),
-        ],
-        EntityKind::Dimension {
-            text,
-            measurement,
-            text_position,
-            dim_type,
-            block_name,
-            style,
-        } => vec![
-            ("Text", text_value(text)),
-            ("Measured", optional_number(*measurement)),
-            (
-                "Text at",
-                text_position.as_ref().map(point).unwrap_or_default(),
-            ),
-            ("Dim type", dim_type.to_string()),
-            ("Block", text_value(block_name)),
-            ("Style", text_value(style)),
-        ],
-        EntityKind::Leader { text, points } => vec![
-            ("Text", optional_text(text.as_ref())),
-            ("Points", length(points.len(), "points")),
-        ],
-        EntityKind::Insert {
-            block_name,
-            position,
-            scale,
-            rotation,
-            ..
-        } => vec![
-            ("Block", text_value(block_name)),
-            ("Position", point(position)),
-            ("Scale", point(scale)),
-            ("Rotation", format_number(*rotation)),
-        ],
-        EntityKind::Point { position } => vec![("Position", point(position))],
-        EntityKind::Solid { points } => vec![("Points", length(points.len(), "points"))],
-        EntityKind::Image {
-            path,
-            image_def,
-            position,
-            size,
-        } => vec![
-            ("Path", optional_text(path.as_ref())),
-            ("Image def", hex(*image_def)),
-            ("Position", point(position)),
-            ("Size", point(size)),
-        ],
-        EntityKind::Viewport {
-            center,
-            width,
-            height,
-            view_center,
-            view_height,
-            frozen_layers,
-        } => vec![
-            ("Center", point(center)),
-            ("Width", format_number(*width)),
-            ("Height", format_number(*height)),
-            ("View at", point(view_center)),
-            ("View size", format_number(*view_height)),
-            ("Frozen", length(frozen_layers.len(), "layers")),
-        ],
-        EntityKind::Unknown { .. } => Vec::new(),
-    }
-}
-
-/// The common fields, the kind's own fields and, for an INSERT, its attributes as `TAG  value` lines.
-fn entity_lines(theme: &Theme, entity: &Entity, width: usize) -> Vec<Line<'static>> {
-    let common = &entity.common;
-    let mut entries = vec![
-        ("Type", entity.display_type().to_owned()),
-        ("Layer", text_value(&common.layer)),
-        ("Layout", text_value(&common.layout)),
-        ("Handle", hex(common.handle)),
-        ("Color", common.color.to_string()),
-        ("Hyperlink", optional_text(common.hyperlink.as_ref())),
-    ];
-    entries.extend(kind_facts(&entity.kind));
-    let mut lines = facts(theme, entries);
-    let EntityKind::Insert { attributes, .. } = &entity.kind else {
-        return lines;
-    };
-    let body = attributes
-        .iter()
-        .map(|attribute| {
-            Line::from(vec![
-                Span::styled(
-                    format!("{}  ", printable(&text_value(&attribute.tag))),
-                    theme.muted(),
-                ),
-                Span::raw(printable(&text_value(&attribute.value))),
-            ])
-        })
-        .collect();
-    lines.extend(titled(theme, "Attributes", width, body));
-    lines
-}
-
-/// The text line by line in bold, then where it came from.
-fn text_item_lines(theme: &Theme, item: &TextItem) -> Vec<Line<'static>> {
-    let mut lines: Vec<Line<'static>> = item
-        .text
-        .to_string()
-        .lines()
-        .map(|line| Line::styled(printable(line), theme.bold()))
-        .collect();
-    lines.push(Line::raw(""));
-    lines.extend(facts(
-        theme,
-        vec![
-            ("Source", source_label(item.source).to_owned()),
-            ("Layer", text_value(&item.layer)),
-            ("Layout", text_value(&item.layout)),
-            (
-                "Position",
-                item.position.as_ref().map(point).unwrap_or_default(),
-            ),
-            ("Height", optional_number(item.height)),
-            ("Handle", hex(item.handle)),
-        ],
-    ));
-    lines
-}
-
-/// Everything the inspector shows for the selected row, with section rules `width` columns wide.
-fn inspector_lines(app: &App, width: usize) -> Vec<Line<'static>> {
-    let theme = &app.theme;
-    let outline = &app.outline;
-    let document = &outline.document;
-    let Some(row) = outline.rows.get(app.selected) else {
-        return Vec::new();
-    };
-    match &row.kind {
-        RowKind::File => file_lines(app, width),
-        RowKind::LayoutsFolder => {
-            facts(theme, vec![("Layouts", document.layouts.len().to_string())])
-        }
-        RowKind::Layout(position) => document
-            .layouts
-            .get(*position)
-            .map(|layout| layout_lines(theme, layout))
-            .unwrap_or_default(),
-        RowKind::BlocksFolder => blocks_folder_lines(theme, &document.blocks),
-        RowKind::Block(index) => document
-            .blocks
-            .get(*index)
-            .map(|block| block_lines(theme, block))
-            .unwrap_or_default(),
-        RowKind::LayersFolder => facts(theme, vec![("Layers", document.layers.len().to_string())]),
-        RowKind::Layer(index) => document
-            .layers
-            .get(*index)
-            .map(|layer| layer_lines(app, layer))
-            .unwrap_or_default(),
-        RowKind::TextFolder => facts(theme, vec![("Items", document.text.len().to_string())]),
-        RowKind::TextGroup(group) => facts(
-            theme,
-            vec![
-                ("Group", group.label().to_owned()),
-                ("Items", group.items(&document.text).len().to_string()),
-            ],
-        ),
-        RowKind::TextItem(group, index) => group
-            .items(&document.text)
-            .get(*index)
-            .map(|item| text_item_lines(theme, item))
-            .unwrap_or_default(),
-        RowKind::TypeGroup {
-            type_name,
-            total,
-            shown,
-            ..
-        } => facts(
-            theme,
-            vec![
-                ("Type", type_name.clone()),
-                ("Count", total.to_string()),
-                ("Shown", shown.to_string()),
-            ],
-        ),
-        RowKind::Entity { slot } => outline
-            .entities
-            .get(*slot)
-            .map(|located| entity_lines(theme, &located.entity, width))
-            .unwrap_or_default(),
-        RowKind::More { .. } => vec![Line::styled(printable(&row.label), theme.muted())],
-    }
-}
-
-fn entity_title(entity: &Entity) -> String {
-    let Some(handle) = entity.common.handle else {
-        return entity.display_type().to_owned();
-    };
-    format!("{} {handle:X}", entity.display_type())
-}
-
-/// The inspector's title: the selected row's kind, with the name for layouts, blocks and layers.
-fn inspector_title(app: &App) -> String {
-    let outline = &app.outline;
-    let Some(row) = outline.rows.get(app.selected) else {
-        return String::new();
-    };
-    match &row.kind {
-        RowKind::File => "Drawing".to_owned(),
-        RowKind::LayoutsFolder => "Layouts".to_owned(),
-        RowKind::Layout(_) => format!("Layout {}", row.label),
-        RowKind::BlocksFolder => "Blocks".to_owned(),
-        RowKind::Block(_) => format!("Block {}", row.label),
-        RowKind::LayersFolder => "Layers".to_owned(),
-        RowKind::Layer(_) => format!("Layer {}", row.label),
-        RowKind::TextFolder => "Text".to_owned(),
-        RowKind::TextGroup(group) => group.label().to_owned(),
-        RowKind::TextItem(group, index) => group
-            .items(&outline.document.text)
-            .get(*index)
-            .map(|item| source_label(item.source).to_owned())
-            .unwrap_or_default(),
-        RowKind::TypeGroup { type_name, .. } => type_name.clone(),
-        RowKind::Entity { slot } => outline
-            .entities
-            .get(*slot)
-            .map(|located| entity_title(&located.entity))
-            .unwrap_or_default(),
-        RowKind::More { .. } => "More".to_owned(),
-    }
 }
 
 fn draw_inspector(app: &mut App, frame: &mut Frame, area: Rect) {
@@ -1107,8 +582,8 @@ fn source_lines(app: &App, height: usize) -> Vec<Line<'static>> {
             .map(|line| hex_line(theme, line))
             .collect(),
     };
-    let shown_to_end = scroll.saturating_add(height) >= source.line_count(app.view);
-    if source.more == 0 || !shown_to_end {
+    let room_after_end = scroll.saturating_add(height) > source.line_count(app.view);
+    if source.more == 0 || !room_after_end {
         return lines;
     }
     lines.push(Line::styled(
@@ -1156,7 +631,22 @@ fn matches_label(count: usize) -> String {
     format!("{count} matches")
 }
 
-fn search_status(app: &App) -> (Vec<Span<'static>>, Vec<Span<'static>>) {
+/// The status bar in parts: the chip and the prompt, the hints dropped from the end when short of room, and the right part.
+struct Status {
+    left: Vec<Span<'static>>,
+    hints: Vec<[Span<'static>; 2]>,
+    right: Vec<Span<'static>>,
+}
+
+impl Status {
+    /// The left part with the first `count` hints.
+    fn left_with(&self, count: usize) -> Line<'static> {
+        let hints = self.hints.iter().take(count).flatten();
+        Line::from(self.left.iter().chain(hints).cloned().collect::<Vec<_>>())
+    }
+}
+
+fn search_status(app: &App) -> Status {
     let theme = &app.theme;
     let left = vec![
         Span::styled("/", theme.key()),
@@ -1169,7 +659,11 @@ fn search_status(app: &App) -> (Vec<Span<'static>>, Vec<Span<'static>>) {
     )];
     right.extend(hint(theme, "enter", "go"));
     right.extend(hint(theme, "esc", "cancel"));
-    (left, right)
+    Status {
+        left,
+        hints: Vec::new(),
+        right,
+    }
 }
 
 fn toast_span(theme: &Theme, toast: &Toast) -> Span<'static> {
@@ -1206,41 +700,49 @@ fn browse_right(app: &App) -> Vec<Span<'static>> {
     spans
 }
 
-fn mode_status(app: &App) -> (Vec<Span<'static>>, Vec<Span<'static>>) {
+fn mode_status(app: &App) -> Status {
     let theme = &app.theme;
     if app.search.editing {
         return search_status(app);
     }
     if app.yanking {
-        let left = hint(theme, "key", "copies that line")
-            .into_iter()
-            .chain(hint(theme, "esc", "cancel"))
-            .collect();
-        return (left, Vec::new());
+        return Status {
+            left: Vec::new(),
+            hints: vec![
+                hint(theme, "key", "copies that line"),
+                hint(theme, "esc", "cancel"),
+            ],
+            right: Vec::new(),
+        };
     }
-    let left = HINTS
-        .iter()
-        .flat_map(|(key, label)| hint(theme, key, label))
-        .collect();
-    (left, browse_right(app))
+    Status {
+        left: Vec::new(),
+        hints: HINTS
+            .iter()
+            .map(|(key, label)| hint(theme, key, label))
+            .collect(),
+        right: browse_right(app),
+    }
 }
 
-fn status_spans(app: &App) -> (Vec<Span<'static>>, Vec<Span<'static>>) {
+fn status(app: &App) -> Status {
     let theme = &app.theme;
-    let (rest, right) = mode_status(app);
-    let mut left = vec![
+    let mut status = mode_status(app);
+    let chip = [
         Span::styled(format!(" {} ", mode(app)), theme.chip(theme.accent)),
         Span::raw("  "),
     ];
-    left.extend(rest);
-    (left, right)
+    status.left.splice(0..0, chip);
+    status
 }
 
-/// The status bar as plain text, the left part then the right part.
+/// The status bar as plain text with every hint, the left part then the right part.
 pub fn status_text(app: &App) -> String {
-    let (left, right) = status_spans(app);
-    left.iter()
-        .chain(&right)
+    let status = status(app);
+    let left = status.left_with(status.hints.len());
+    left.spans
+        .iter()
+        .chain(&status.right)
         .map(|span| span.content.as_ref())
         .collect::<String>()
         .trim_end()
@@ -1248,8 +750,14 @@ pub fn status_text(app: &App) -> String {
 }
 
 fn draw_status(app: &App, frame: &mut Frame, area: Rect) {
-    let (left, right) = status_spans(app);
-    spread(frame, area, Line::from(left), Line::from(right));
+    let status = status(app);
+    let right = Line::from(status.right.clone());
+    let room = usize::from(area.width).saturating_sub(right.width() + BAR_GAP);
+    let candidates = (0..=status.hints.len())
+        .rev()
+        .map(|count| status.left_with(count))
+        .collect();
+    spread(frame, area, first_fitting(candidates, room), right);
 }
 
 /// A centered rectangle of the given size, shrunk to fit `area`.
@@ -1367,10 +875,6 @@ mod tests {
                 .find(|child| app.outline.rows[**child].label == *label)
                 .unwrap()
         })
-    }
-
-    fn texts(lines: &[Line]) -> Vec<String> {
-        lines.iter().map(Line::to_string).collect()
     }
 
     fn span<'l>(line: &'l Line<'static>, text: &str) -> &'l Span<'static> {
@@ -1491,113 +995,5 @@ mod tests {
             header_left(&app, 200).to_string(),
             " cadboss   demo.dxf   DXF AC1032   Millimeters"
         );
-    }
-
-    #[test]
-    fn inspector_titles_name_the_row_kind() {
-        let mut app = demo();
-        let mut title = |path: &[&str]| {
-            let target = row(&app, path);
-            app.select(target);
-            inspector_title(&app)
-        };
-        assert_eq!(title(&[]), "Drawing");
-        assert_eq!(title(&["Layouts"]), "Layouts");
-        assert_eq!(title(&["Layouts", "Model"]), "Layout Model");
-        assert_eq!(title(&["Blocks"]), "Blocks");
-        assert_eq!(title(&["Blocks", "PUMP"]), "Block PUMP");
-        assert_eq!(title(&["Layers"]), "Layers");
-        assert_eq!(title(&["Layers", "WALLS"]), "Layer WALLS");
-        assert_eq!(title(&["Text"]), "Text");
-        assert_eq!(title(&["Text", "attributes"]), "attributes");
-        assert_eq!(title(&["Text", "attributes", "TAG=P-101"]), "Attribute");
-        assert_eq!(title(&["Text", "title block", "DRAWN"]), "Annotation");
-        assert_eq!(title(&["Text", "annotations", "6000"]), "Dimension");
-        assert_eq!(
-            title(&["Text", "references", "../xrefs/site-plan.dxf"]),
-            "Xref"
-        );
-        assert_eq!(title(&["Text", "names", "WALLS"]), "Layer name");
-        assert_eq!(title(&["Layouts", "Model", "LINE"]), "LINE");
-
-        app.update(Msg::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)));
-        let first = app.outline.rows[app.selected].children[0];
-        app.select(first);
-        assert_eq!(inspector_title(&app), "LINE 135");
-    }
-
-    #[test]
-    fn entity_inspector_lists_kind_fields_and_attributes() {
-        let mut app = demo();
-        let insert = row(&app, &["Layouts", "Model", "INSERT"]);
-        app.select(insert);
-        app.update(Msg::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)));
-        app.select(app.outline.rows[insert].children[0]);
-        let lines = texts(&inspector_lines(&app, 30));
-        assert_eq!(
-            lines[..6],
-            [
-                "Type       INSERT",
-                "Layer      EQUIPMENT",
-                "Layout     Model",
-                "Handle     136",
-                "Color      256",
-                "Block      PUMP",
-            ]
-        );
-        assert!(lines.iter().any(|line| line.starts_with("Position   ")));
-        assert!(lines.contains(&"Scale      1, 1".to_owned()));
-        assert!(lines.contains(&"Rotation   0".to_owned()));
-        assert!(lines.contains(&"Attributes ───────────────────".to_owned()));
-        assert!(lines.contains(&"TAG  P-101".to_owned()));
-        assert!(!lines.iter().any(|line| line.starts_with("Hyperlink")));
-
-        app.select(row(&app, &["Layouts", "Model", "INSERT"]));
-        assert_eq!(
-            texts(&inspector_lines(&app, 30)),
-            ["Type       INSERT", "Count      3", "Shown      3"]
-        );
-        app.select(row(&app, &["Layers", "WALLS"]));
-        assert_eq!(
-            texts(&inspector_lines(&app, 30)),
-            [
-                "Color      7",
-                "Frozen     no",
-                "Off        no",
-                "Locked     no",
-                "Entities   2"
-            ]
-        );
-        app.select(row(&app, &["Blocks"]));
-        assert_eq!(
-            texts(&inspector_lines(&app, 30)),
-            ["Blocks     6", "Anonymous  3", "Xrefs      1"]
-        );
-        app.select(row(&app, &["Blocks", "SITE-PLAN"]));
-        assert!(texts(&inspector_lines(&app, 30))
-            .contains(&"Xref       ../xrefs/site-plan.dxf".to_owned()));
-    }
-
-    #[test]
-    fn file_inspector_lists_entity_types_then_notes() {
-        let mut app = demo();
-        let lines = texts(&inspector_lines(&app, 24));
-        assert_eq!(lines[11], "");
-        assert_eq!(lines[12], "Entity types ───────────");
-        assert_eq!(lines[13], "INSERT      4");
-        assert_eq!(lines.len(), 21);
-        assert!(!lines.iter().any(|line| line.starts_with("Notes")));
-
-        app.outline
-            .document
-            .report
-            .note(SkipKind::Entity, SkipReason::Malformed);
-        let lines = texts(&inspector_lines(&app, 24));
-        assert_eq!(lines[22], "Notes while reading (1) ");
-        assert_eq!(lines[23], "1 entity skipped (malformed)");
-
-        app.loading = true;
-        let lines = texts(&inspector_lines(&app, 24));
-        assert_eq!(lines.last().unwrap(), "Extents    (0, 0) to (12500, 8000)");
     }
 }

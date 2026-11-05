@@ -10,9 +10,11 @@ use cadboss_tui::app::{App, Msg, Pane};
 use cadboss_tui::outline::Outline;
 use cadboss_tui::source::View;
 use cadboss_tui::ui;
+use cadboss_tui::yank::YankTarget;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::backend::TestBackend;
 use ratatui::buffer::Buffer;
+use ratatui::layout::Rect;
 use ratatui::style::Modifier;
 use ratatui::Terminal;
 
@@ -53,10 +55,14 @@ fn type_text(app: &mut App, text: &str) {
     }
 }
 
-fn render(app: &mut App) -> Result<Buffer, Box<dyn Error>> {
-    let mut terminal = Terminal::new(TestBackend::new(80, 24))?;
+fn render_sized(app: &mut App, width: u16, height: u16) -> Result<Buffer, Box<dyn Error>> {
+    let mut terminal = Terminal::new(TestBackend::new(width, height))?;
     terminal.draw(|frame| ui::draw(app, frame))?;
     Ok(terminal.backend().buffer().clone())
+}
+
+fn render(app: &mut App) -> Result<Buffer, Box<dyn Error>> {
+    render_sized(app, 80, 24)
 }
 
 fn line(buffer: &Buffer, y: u16) -> String {
@@ -370,5 +376,91 @@ fn tab_cycles_focus_and_scrolls_the_source() -> TestResult {
     assert!(!contains(&lines, "   9  $ACADVER"), "{lines:?}");
     press(&mut app, KeyCode::Tab);
     assert_eq!(app.focus, Pane::Tree);
+    Ok(())
+}
+
+#[test]
+fn tiny_terminals_render_without_panicking() -> TestResult {
+    let mut app = demo()?;
+    press(&mut app, KeyCode::Char('h'));
+    render_sized(&mut app, 0, 24)?;
+    render_sized(&mut app, 0, 0)?;
+    render_sized(&mut app, 1, 1)?;
+
+    let mut app = demo()?;
+    type_text(&mut app, "Glljjjll");
+    assert_eq!(label(&app), "TAG=P-101");
+    render_sized(&mut app, 1, 24)?;
+    for popup in [KeyCode::Char('y'), KeyCode::Char('?')] {
+        press(&mut app, popup);
+        for (width, height) in [(20, 5), (1, 1), (0, 0)] {
+            render_sized(&mut app, width, height)?;
+        }
+        press(&mut app, KeyCode::Esc);
+    }
+    assert!(!app.yanking);
+    assert!(!app.help);
+    Ok(())
+}
+
+#[test]
+fn status_bar_drops_whole_hints_to_make_room() -> TestResult {
+    let mut app = demo()?;
+    press(&mut app, KeyCode::Char('/'));
+    type_text(&mut app, "p-10");
+    press(&mut app, KeyCode::Enter);
+    let lines = frame(&mut app)?;
+    assert_eq!(
+        lines.last().map(String::as_str),
+        Some(" browse   / search   ] next layout   x hex   y copy     match 1 of 4   n next")
+    );
+
+    app.update(Msg::Copied {
+        target: YankTarget::Query,
+        result: Err("no native clipboard".to_owned()),
+    });
+    let lines = frame(&mut app)?;
+    assert_eq!(
+        lines.last().map(String::as_str),
+        Some(" browse   / search                 Could not copy jq query: no native clipboard")
+    );
+    assert!(ui::status_text(&app).contains("? keys   q quit"));
+    Ok(())
+}
+
+#[test]
+fn a_record_past_the_limit_ends_with_the_count_of_bytes_left_out() -> TestResult {
+    let long = "A".repeat(70_000);
+    let bytes = DxfBuilder::new().mtext(&long, (0.0, 0.0), 2.5).build();
+    let mut app = loaded(DxfDocument::load(bytes)?, "long.dxf", "long.dxf");
+    type_text(&mut app, "jllllll");
+    assert!(label(&app).starts_with("MTEXT  0  AAAA"), "{}", label(&app));
+    press(&mut app, KeyCode::Char('x'));
+    assert_eq!(app.view, View::Hex);
+    let more = app.source.more;
+    assert!(more > 0);
+    let note = format!("│ {more} more bytes: cadboss obj shows them");
+    assert!(!contains(&frame(&mut app)?, &note));
+
+    let count = app.source.hex.len();
+    let height = usize::from(
+        ui::panes(Rect::new(0, 0, 80, 24), app.splits)
+            .source
+            .height
+            .saturating_sub(2),
+    );
+    app.source_scroll = count - height;
+    let lines = frame(&mut app)?;
+    assert!(!contains(&lines, &note), "{lines:?}");
+    app.source_scroll = count - height + 1;
+    let lines = frame(&mut app)?;
+    assert!(contains(&lines, &note), "{lines:?}");
+
+    press(&mut app, KeyCode::Tab);
+    press(&mut app, KeyCode::Tab);
+    press(&mut app, KeyCode::End);
+    assert_eq!(app.source_scroll, count - 1);
+    let lines = frame(&mut app)?;
+    assert!(contains(&lines, &note), "{lines:?}");
     Ok(())
 }
