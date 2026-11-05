@@ -81,6 +81,10 @@ fn detect_code_width(bytes: &[u8]) -> CodeWidth {
 
 /// Reads a group code. Two-byte codes are little-endian i16; with one-byte codes a byte of 255
 /// escapes to a following two-byte little-endian code.
+pub(crate) fn is_chunk(code: i16) -> bool {
+    value_width(code) == ValueWidth::Chunk
+}
+
 fn read_code(bytes: &[u8], pos: usize, width: CodeWidth) -> Option<(i16, usize)> {
     let first = *bytes.get(pos)?;
     let wide = width == CodeWidth::Two || first == 255;
@@ -157,5 +161,8 @@ pub(crate) fn lex_binary(bytes: &[u8], budget: &Budget) -> Result<(Tape, Report)
             break;
         }
     }
-    Ok(builder.finish(true))
+    Ok(builder.finish(match width {
+        CodeWidth::One => 1,
+        CodeWidth::Two => 2,
+    }))
 }

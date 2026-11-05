@@ -105,7 +105,7 @@ impl Builder {
         true
     }
 
-    pub(crate) fn finish(mut self, binary: bool) -> (Tape, Report) {
+    pub(crate) fn finish(mut self, code_width: u8) -> (Tape, Report) {
         if self.awaiting_name {
             self.report.note(SkipKind::Section, SkipReason::Malformed);
         }
@@ -115,7 +115,7 @@ impl Builder {
             tokens: self.tokens,
             long_values: self.long_values,
             sections: self.sections,
-            binary,
+            code_width,
         };
         (tape, self.report)
     }
@@ -228,5 +228,5 @@ pub(crate) fn lex_ascii(bytes: &[u8], budget: &Budget) -> Result<(Tape, Report)>
             break;
         }
     }
-    Ok(builder.finish(false))
+    Ok(builder.finish(0))
 }
