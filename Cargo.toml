@@ -13,7 +13,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0" # x-release-please-version
+version = "0.1.1" # x-release-please-version
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/4thel00z/cadboss"
@@ -21,11 +21,11 @@ readme = "README.md"
 keywords = ["cad", "dxf", "dwg", "step", "ifc"]
 
 [workspace.dependencies]
-cadboss-core = { path = "crates/cadboss-core", version = "0.1.0" } # x-release-please-version
-cadboss-model = { path = "crates/cadboss-model", version = "0.1.0" } # x-release-please-version
-cadboss-dxf = { path = "crates/cadboss-dxf", version = "0.1.0" } # x-release-please-version
-cadboss-output = { path = "crates/cadboss-output", version = "0.1.0" } # x-release-please-version
-cadboss-tui = { path = "crates/cadboss-tui", version = "0.1.0" } # x-release-please-version
+cadboss-core = { path = "crates/cadboss-core", version = "0.1.1" } # x-release-please-version
+cadboss-model = { path = "crates/cadboss-model", version = "0.1.1" } # x-release-please-version
+cadboss-dxf = { path = "crates/cadboss-dxf", version = "0.1.1" } # x-release-please-version
+cadboss-output = { path = "crates/cadboss-output", version = "0.1.1" } # x-release-please-version
+cadboss-tui = { path = "crates/cadboss-tui", version = "0.1.1" } # x-release-please-version
 thiserror = "2"
 memmap2 = "0.9"
 memchr = "2.8"
